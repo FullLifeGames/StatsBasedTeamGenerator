@@ -12,7 +12,7 @@ As of April 24, 2026, Smogon's public stats index lists monthly data through `20
 - Generate complete teams with inspectable scoring, not just the six most-used Pokemon.
 - Use checks and counters to estimate threat coverage and avoid teams that fold to common metagame picks.
 - Use teammate data to reward proven synergies while preventing over-concentrated or repetitive builds.
-- Build Showdown-importable sets from the most common abilities, items, spreads, moves, and tera types in the selected format.
+- Build Showdown-importable sets from common abilities, items, spreads, moves, and tera types while also fitting each set to team needs, teammate synergies, and role limits.
 - Make the first screen the real generator UI, with sprites, role chips, score explanations, and import/export controls.
 - Use `@pkmn` libraries where they fit: canonical dex data, legality/type metadata, and Showdown-style sprites.
 
@@ -81,14 +81,16 @@ Keep raw fetched payloads separate from normalized objects so parser changes do 
 Use a beam-search optimizer:
 
 1. Build candidate Pokemon pool from usage, viability ceiling, and optional user seeds.
-2. Generate set candidates per Pokemon from common abilities, items, spreads, tera types, and moves.
+2. Generate set candidates per Pokemon from common abilities, items, spreads, tera types, and moves, then score those sets in the context of the current partial team.
 3. Start beams from seeds or high-value candidates.
 4. Expand teams by adding candidates that improve total score.
-5. Score each team after every addition using usage, set confidence, teammate synergy, role coverage, threat coverage, type balance, duplicate-role penalties, and archetype fit.
+5. Score each team after every addition using usage, set confidence, teammate synergy, role coverage, threat coverage, type balance, set-to-team fit, duplicate-role penalties, and archetype fit.
 6. Keep the best diverse beams to avoid converging on one obvious high-usage core.
 7. Return the top team plus alternatives and an explanation for each pick.
 
 The scoring engine must expose component scores so the UI can explain why a Pokemon was selected.
+
+Set choice is part of team optimization, not a separate "most common set" lookup. For example, if a singles team already has Stealth Rock and Spikes support, later set candidates with another low-value hazard slot should be penalized unless the Pokemon's best role truly depends on that move. The same principle applies in doubles: a second or third speed-control option can be valuable, but redundant passive support without damage, protection, or positioning value should be penalized.
 
 ## Role Detection
 
@@ -160,8 +162,10 @@ Doubles synergy emphasizes:
 Set generation should prefer statistically coherent sets:
 
 - Choose the highest-confidence ability unless the item/move/spread combination strongly indicates another ability.
-- Select item, spread, tera type, and moves from weighted stats.
-- Build move sets by maximizing common move weight while preserving role requirements and avoiding illegal or redundant combinations where `@pkmn` data can detect them.
+- Select item, spread, tera type, and moves from weighted stats, then adjust by team context.
+- Build move sets by maximizing common move weight while preserving role requirements, filling missing team functions, and avoiding illegal or redundant combinations where `@pkmn` data can detect them.
+- Penalize redundant team roles, especially repeated low-marginal-value roles such as multiple singles hazard setters or removers beyond the team's needs.
+- Preserve useful redundancy when the format rewards it, such as multiple doubles speed-control modes, but require those repeated roles to add distinct value.
 - If four good moves cannot be confidently selected, include a warning rather than hiding uncertainty.
 - Support Showdown import format for species, item, ability, tera type, EVs, nature, and moves.
 
