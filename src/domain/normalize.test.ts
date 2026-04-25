@@ -45,9 +45,39 @@ describe('normalizeChaos', () => {
     expect(dataset.source.battles).toBe(1289120);
     expect(dataset.pokemonById.greattusk.name).toBe('Great Tusk');
     expect(dataset.pokemonById.greattusk.moves.rapidspin).toBeCloseTo(3630.1);
+    expect(dataset.pokemonById.greattusk.teraTypes.steel).toBeCloseTo(1133.5);
     expect(dataset.pokemonById.greattusk.checks).toEqual([
       {target: 'ironvaliant', samples: 30.68, probability: 0.814, deviation: 0.07}
     ]);
     expect(dataset.displayNames.ironvaliant).toBe('Iron Valiant');
+  });
+
+  it('converts fractional usage to percentages and filters invalid spread weights', () => {
+    const dataset = normalizeChaos(
+      {
+        data: {
+          Glimmora: {
+            usage: 0.3058714,
+            'Raw count': 42,
+            Spreads: {
+              'Timid:0/0/0/252/4/252': 100,
+              'Jolly:0/252/0/0/4/252': Number.NaN,
+              'Modest:0/0/0/252/4/252': '75'
+            },
+            'Tera Types': {rock: 50}
+          }
+        }
+      },
+      {
+        month: '2026-03',
+        format: 'gen9ou',
+        cutoff: 1825,
+        url: 'https://www.smogon.com/stats/2026-03/chaos/gen9ou-1825.json'
+      }
+    );
+
+    expect(dataset.pokemonById.glimmora.usage).toBeCloseTo(30.58714);
+    expect(dataset.pokemonById.glimmora.spreads).toEqual({'Timid:0/0/0/252/4/252': 100});
+    expect(dataset.pokemonById.glimmora.teraTypes).toEqual({rock: 50});
   });
 });

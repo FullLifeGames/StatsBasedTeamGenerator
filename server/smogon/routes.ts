@@ -16,6 +16,12 @@ const defaultDependencies: SmogonRouterDependencies = {
   fetchText
 };
 
+export function isValidStatsRequest(month: string, format: string, cutoff: string): boolean {
+  if (!/^\d{4}-\d{2}$/.test(month) || !/^[a-z0-9]+$/.test(format) || !/^\d+$/.test(cutoff)) return false;
+  const cutoffNumber = Number(cutoff);
+  return Number.isSafeInteger(cutoffNumber) && cutoffNumber >= 0;
+}
+
 export function createSmogonRouter(dependencies: SmogonRouterDependencies = defaultDependencies): Router {
   const router = express.Router();
 
@@ -34,7 +40,7 @@ export function createSmogonRouter(dependencies: SmogonRouterDependencies = defa
     const cutoffNumber = Number(cutoff);
     const url = `https://www.smogon.com/stats/${month}/chaos/${format}-${cutoffNumber}.json`;
 
-    if (!/^\d{4}-\d{2}$/.test(month) || !/^[a-z0-9]+$/.test(format) || !Number.isFinite(cutoffNumber)) {
+    if (!isValidStatsRequest(month, format, cutoff)) {
       response.status(400).json({message: 'Invalid Smogon stats request'});
       return;
     }

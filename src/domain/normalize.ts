@@ -7,22 +7,22 @@ function numberValue(value: unknown, fallback = 0): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
-function weightedTable(value: unknown): WeightedTable {
+function finiteTable(value: unknown, normalizeKey: (key: string) => string): WeightedTable {
   if (!value || typeof value !== 'object') return {};
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>)
       .filter(([, weight]) => typeof weight === 'number' && Number.isFinite(weight))
-      .map(([key, weight]) => [toId(key), weight as number])
+      .map(([key, weight]) => [normalizeKey(key), weight as number])
   );
 }
 
-function teraTable(value: unknown): WeightedTable {
-  if (!value || typeof value !== 'object') return {};
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .filter(([, weight]) => typeof weight === 'number' && Number.isFinite(weight))
-      .map(([key, weight]) => [key, weight as number])
-  );
+function weightedTable(value: unknown): WeightedTable {
+  return finiteTable(value, toId);
+}
+
+function usageValue(value: unknown): number {
+  const usage = numberValue(value);
+  return usage > 0 && usage <= 1 ? usage * 100 : usage;
 }
 
 function normalizeChecks(value: unknown): CounterEdge[] {
@@ -51,17 +51,14 @@ export function normalizeChaos(raw: unknown, source: SourceMeta): StatsDataset {
     return {
       id,
       name,
-      usage: numberValue(entry.usage),
+      usage: usageValue(entry.usage),
       rawCount: numberValue(entry['Raw count']),
       viability: viability(entry['Viability Ceiling']),
       abilities: weightedTable(entry.Abilities),
       items: weightedTable(entry.Items),
-      spreads:
-        entry.Spreads && typeof entry.Spreads === 'object'
-          ? Object.fromEntries(Object.entries(entry.Spreads as Record<string, number>))
-          : {},
+      spreads: finiteTable(entry.Spreads, key => key),
       moves: weightedTable(entry.Moves),
-      teraTypes: teraTable(entry['Tera Types']),
+      teraTypes: weightedTable(entry['Tera Types']),
       teammates: weightedTable(entry.Teammates),
       checks: normalizeChecks(entry['Checks and Counters'])
     };
