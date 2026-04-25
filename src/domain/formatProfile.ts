@@ -80,7 +80,8 @@ function cloneRoleWeights(weights: RoleWeights): RoleWeights {
 export function inferFormatProfile(formatId: string): FormatProfile {
   const id = formatId.toLowerCase();
   const doubles = /doubles|vgc|2v2|4v4/.test(id);
-  const gen = Number(id.match(/^gen(\d+)/)?.[1] ?? 9);
+  const compactGen = id.match(/^gen(\d)(?=1v1|2v2|4v4)/)?.[1];
+  const gen = Number(compactGen ?? id.match(/^gen(\d+)/)?.[1] ?? 9);
   return {
     id,
     gen,
