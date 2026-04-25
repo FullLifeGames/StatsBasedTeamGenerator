@@ -80,7 +80,12 @@ export function InsightPanel({team}: InsightPanelProps) {
 
       <section className="insight-section" aria-labelledby="import-heading">
         <h3 id="import-heading">Showdown import</h3>
-        <textarea className="showdown-import" readOnly value={team.importable} />
+        <textarea
+          aria-labelledby="import-heading"
+          className="showdown-import"
+          readOnly
+          value={team.importable}
+        />
       </section>
     </aside>
   );
