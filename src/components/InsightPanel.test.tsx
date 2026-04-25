@@ -23,7 +23,8 @@ const dataset = makeDataset([
     items: {choicescarf: 75},
     spreads: {'Timid:0/0/0/252/4/252': 100},
     moves: {shadowball: 100, makeitrain: 90, trick: 70, focusblast: 60},
-    teraTypes: {steel: 100}
+    teraTypes: {steel: 100},
+    teammates: {greattusk: 500}
   }),
   makePokemon({
     id: 'kingambit',
@@ -33,7 +34,8 @@ const dataset = makeDataset([
     items: {blackglasses: 65},
     spreads: {'Adamant:112/252/0/0/0/144': 100},
     moves: {kowtowcleave: 100, suckerpunch: 95, ironthead: 80, swordsdance: 70},
-    teraTypes: {dark: 100}
+    teraTypes: {dark: 100},
+    teammates: {greattusk: 50}
   })
 ]);
 
@@ -49,6 +51,8 @@ describe('InsightPanel', () => {
 
     expect(screen.getByText('Showdown import')).toBeInTheDocument();
     expect(screen.getByText('Total')).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: 'Synergy'})).toBeInTheDocument();
+    expect(screen.getByText('Great Tusk + Gholdengo')).toBeInTheDocument();
     expect(screen.getByDisplayValue(/Great Tusk/)).toBeInTheDocument();
   });
 });

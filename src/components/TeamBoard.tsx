@@ -19,13 +19,27 @@ export function TeamBoard({team, onToggleLock, onReplace}: TeamBoardProps) {
     );
   }
 
+  const coveredThreats = team.threats.filter(threat => threat.covered).length;
+
   return (
     <section className="team-board" aria-label="Generated team">
       <div className="team-board__header">
-        <h2>Generated team</h2>
-        <p>
-          {team.source.format} at {team.source.cutoff}
-        </p>
+        <div>
+          <h2>Generated team</h2>
+          <p>
+            {team.source.format} at {team.source.cutoff}
+          </p>
+        </div>
+        <dl className="team-board__metrics" aria-label="Team summary">
+          <div>
+            <dt>Score</dt>
+            <dd>{team.score.total.toFixed(1)}</dd>
+          </div>
+          <div>
+            <dt>Threats</dt>
+            <dd>{coveredThreats}/{team.threats.length}</dd>
+          </div>
+        </dl>
       </div>
 
       <div className="team-grid">

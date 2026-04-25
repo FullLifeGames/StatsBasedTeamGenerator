@@ -53,6 +53,10 @@ export function ControlRail({
         <p className="eyebrow">Smogon stats</p>
         <h1>Team generator</h1>
       </div>
+      <div className="control-rail__meta" aria-label="Loaded stats options">
+        <span>{availableFormats.length} formats</span>
+        <span>{availableCutoffs.length} cutoffs</span>
+      </div>
 
       <label className="field">
         <span>Month</span>

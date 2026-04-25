@@ -19,6 +19,10 @@ function formatScore(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
 
+function pairName(team: GeneratedTeam, pokemonId: string): string {
+  return team.members.find(member => member.stats.id === pokemonId)?.stats.name ?? pokemonId;
+}
+
 export function InsightPanel({team}: InsightPanelProps) {
   if (!team) {
     return (
@@ -32,6 +36,7 @@ export function InsightPanel({team}: InsightPanelProps) {
   }
 
   const coveredThreats = team.threats.filter(threat => threat.covered).length;
+  const topSynergy = team.synergy.slice(0, 4);
 
   return (
     <aside className="insight-panel" aria-label="Team insights">
@@ -61,11 +66,27 @@ export function InsightPanel({team}: InsightPanelProps) {
           {team.threats.slice(0, 5).map(threat => (
             <li key={threat.threatId}>
               <span>{threat.threatName}</span>
-              <strong>{threat.covered ? 'Covered' : 'Open'}</strong>
+              <strong className={threat.covered ? 'status-pill status-pill--covered' : 'status-pill status-pill--open'}>
+                {threat.covered ? 'Covered' : 'Open'}
+              </strong>
             </li>
           ))}
         </ul>
       </section>
+
+      {topSynergy.length ? (
+        <section className="insight-section" aria-labelledby="synergy-heading">
+          <h3 id="synergy-heading">Synergy</h3>
+          <ul className="synergy-list">
+            {topSynergy.map(pair => (
+              <li key={`${pair.a}-${pair.b}`}>
+                <span>{pairName(team, pair.a)} + {pairName(team, pair.b)}</span>
+                <strong>{formatScore(pair.score)}</strong>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {team.score.warnings.length ? (
         <section className="insight-section" aria-labelledby="warning-heading">
