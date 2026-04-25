@@ -1,3 +1,4 @@
+import {Dex} from '@pkmn/dex';
 import {detectRolesForMoves} from './roles';
 import type {FormatProfile, PokemonStats, RoleScores, SetCandidate, WeightedTable} from './types';
 
@@ -10,47 +11,6 @@ interface ContextMember {
   [key: string]: unknown;
 }
 
-const displayNames: Record<string, string> = {
-  boosterenergy: 'Booster Energy',
-  rockyhelmet: 'Rocky Helmet',
-  heavydutyboots: 'Heavy-Duty Boots',
-  leftovers: 'Leftovers',
-  protosynthesis: 'Protosynthesis',
-  rapidspin: 'Rapid Spin',
-  headlongrush: 'Headlong Rush',
-  stealthrock: 'Stealth Rock',
-  knockoff: 'Knock Off',
-  icespinner: 'Ice Spinner',
-  closecombat: 'Close Combat',
-  spikes: 'Spikes',
-  toxicspikes: 'Toxic Spikes',
-  stickyweb: 'Sticky Web',
-  defog: 'Defog',
-  mortalspin: 'Mortal Spin',
-  tailwind: 'Tailwind',
-  trickroom: 'Trick Room',
-  icywind: 'Icy Wind',
-  electroweb: 'Electroweb',
-  thunderwave: 'Thunder Wave',
-  protect: 'Protect',
-  fakeout: 'Fake Out',
-  followme: 'Follow Me',
-  ragepowder: 'Rage Powder',
-  helpinghand: 'Helping Hand',
-  uturn: 'U-turn',
-  voltswitch: 'Volt Switch',
-  partingshot: 'Parting Shot',
-  earthquake: 'Earthquake',
-  rockslide: 'Rock Slide',
-  heatwave: 'Heat Wave',
-  dazzlinggleam: 'Dazzling Gleam',
-  muddywater: 'Muddy Water',
-  makeitrain: 'Make It Rain',
-  bleakwindstorm: 'Bleakwind Storm',
-  discharge: 'Discharge',
-  steel: 'Steel'
-};
-
 const evLabels = ['HP', 'Atk', 'Def', 'SpA', 'SpD', 'Spe'];
 
 function topEntries(table: WeightedTable, limit = 1): Array<[string, number]> {
@@ -59,10 +19,20 @@ function topEntries(table: WeightedTable, limit = 1): Array<[string, number]> {
     .slice(0, limit);
 }
 
-function display(id: string): string {
-  return displayNames[id] ?? id
+function titleCase(id: string): string {
+  return id
     .replace(/([a-z])([0-9])/g, '$1 $2')
     .replace(/(^|\s)\w/g, letter => letter.toUpperCase());
+}
+
+function dexDisplay(profile: FormatProfile, kind: 'ability' | 'item' | 'move', id: string): string {
+  const dex = Dex.forGen(profile.gen);
+  const entry = kind === 'ability'
+    ? dex.abilities.get(id)
+    : kind === 'item'
+      ? dex.items.get(id)
+      : dex.moves.get(id);
+  return entry.exists ? entry.name : titleCase(id);
 }
 
 function parseSpread(spread?: string): {nature?: string; evs?: string} {
@@ -81,29 +51,39 @@ function existingRoleScore(context: TeamContext | undefined, role: keyof RoleSco
   return context?.existingRoles?.[role] ?? 0;
 }
 
-function adjustedMoveWeight(stats: PokemonStats, profile: FormatProfile, moveId: string, context?: TeamContext): number {
+function tableTotal(table: WeightedTable): number {
+  return Object.values(table).reduce((sum, value) => sum + value, 0);
+}
+
+function tableShare(table: WeightedTable, weight: number): number {
+  const total = tableTotal(table);
+  return total > 0 ? Math.min(1, weight / total) : 0;
+}
+
+function adjustedMoveWeight(stats: PokemonStats, profile: FormatProfile, moveId: string, moveTotal: number, context?: TeamContext): number {
   const roles = detectRolesForMoves(stats, profile, [moveId]);
   let weight = stats.moves[moveId] ?? 0;
 
   if (profile.battleStyle === 'singles') {
     if (existingRoleScore(context, 'hazardSetter') > 0 && roles.hazardSetter > 0) {
-      weight -= profile.roleWeights.duplicateHazardPenalty * 30;
+      weight -= moveTotal * roles.hazardSetter * profile.roleWeights.duplicateHazardPenalty;
     }
     if (existingRoleScore(context, 'hazardRemoval') > 0 && roles.hazardRemoval > 0) {
-      weight -= profile.roleWeights.duplicateRemovalPenalty * 20;
+      weight -= moveTotal * roles.hazardRemoval * profile.roleWeights.duplicateRemovalPenalty;
     }
   }
 
   if (profile.battleStyle === 'doubles' && existingRoleScore(context, 'speedControl') > 0 && roles.speedControl > 0) {
-    weight -= profile.roleWeights.duplicateSpeedControlPenalty * 10;
+    weight -= moveTotal * roles.speedControl * profile.roleWeights.duplicateSpeedControlPenalty * 0.25;
   }
 
   return weight;
 }
 
 function selectedMoveIds(stats: PokemonStats, profile: FormatProfile, context?: TeamContext): string[] {
+  const moveTotal = tableTotal(stats.moves);
   return Object.keys(stats.moves)
-    .sort((a, b) => adjustedMoveWeight(stats, profile, b, context) - adjustedMoveWeight(stats, profile, a, context))
+    .sort((a, b) => adjustedMoveWeight(stats, profile, b, moveTotal, context) - adjustedMoveWeight(stats, profile, a, moveTotal, context))
     .slice(0, 4);
 }
 
@@ -121,18 +101,25 @@ export function buildSetCandidates(stats: PokemonStats, profile: FormatProfile, 
   const moveIds = selectedMoveIds(stats, profile, context);
   const moveWeight = moveIds.reduce((sum, moveId) => sum + (stats.moves[moveId] ?? 0), 0);
   const spread = parseSpread(spreadId);
+  const confidence = average([
+    tableShare(stats.abilities, abilityWeight),
+    tableShare(stats.items, itemWeight),
+    tableShare(stats.spreads, spreadWeight),
+    tableShare(stats.teraTypes, teraTypeWeight),
+    tableShare(stats.moves, moveWeight)
+  ]);
 
   return [{
     pokemonId: stats.id,
     pokemonName: stats.name,
-    ability: abilityId ? display(abilityId) : '',
-    item: itemId ? display(itemId) : '',
-    teraType: teraTypeId ? display(teraTypeId) : undefined,
+    ability: abilityId ? dexDisplay(profile, 'ability', abilityId) : '',
+    item: itemId ? dexDisplay(profile, 'item', itemId) : '',
+    teraType: teraTypeId ? titleCase(teraTypeId) : undefined,
     nature: spread.nature,
     evs: spread.evs,
-    moves: moveIds.map(display),
+    moves: moveIds.map(moveId => dexDisplay(profile, 'move', moveId)),
     roles: detectRolesForMoves(stats, profile, moveIds),
-    confidence: average([abilityWeight, itemWeight, spreadWeight, teraTypeWeight, moveWeight / 4]) / 100,
+    confidence,
     sourceWeights: {
       ability: abilityWeight,
       item: itemWeight,
