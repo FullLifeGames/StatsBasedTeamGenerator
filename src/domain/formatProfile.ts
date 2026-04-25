@@ -1,6 +1,6 @@
 import type {FormatProfile, RoleScores, RoleWeights} from './types';
 
-const zeroRoles: RoleScores = {
+const zeroRoles = Object.freeze({
   physicalBreaker: 0,
   specialBreaker: 0,
   cleaner: 0,
@@ -19,11 +19,11 @@ const zeroRoles: RoleScores = {
   positioning: 0,
   spreadPressure: 0,
   boardControl: 0
-};
+}) as RoleScores;
 
 export const emptyRoles = zeroRoles;
 
-const singlesWeights: RoleWeights = {
+const singlesWeights = Object.freeze({
   ...zeroRoles,
   physicalBreaker: 1,
   specialBreaker: 1,
@@ -46,9 +46,9 @@ const singlesWeights: RoleWeights = {
   duplicateHazardPenalty: 1.4,
   duplicateRemovalPenalty: 1.0,
   duplicateSpeedControlPenalty: 0.2
-};
+}) as RoleWeights;
 
-const doublesWeights: RoleWeights = {
+const doublesWeights = Object.freeze({
   ...zeroRoles,
   physicalBreaker: 0.9,
   specialBreaker: 0.9,
@@ -71,18 +71,23 @@ const doublesWeights: RoleWeights = {
   duplicateHazardPenalty: 0.1,
   duplicateRemovalPenalty: 0.05,
   duplicateSpeedControlPenalty: 0.25
-};
+}) as RoleWeights;
+
+function cloneRoleWeights(weights: RoleWeights): RoleWeights {
+  return Object.freeze({...weights}) as RoleWeights;
+}
 
 export function inferFormatProfile(formatId: string): FormatProfile {
-  const doubles = /doubles|vgc|2v2|4v4/.test(formatId);
-  const gen = Number(formatId.match(/^gen(\d+)/)?.[1] ?? 9);
+  const id = formatId.toLowerCase();
+  const doubles = /doubles|vgc|2v2|4v4/.test(id);
+  const gen = Number(id.match(/^gen(\d+)/)?.[1] ?? 9);
   return {
-    id: formatId,
+    id,
     gen,
     battleStyle: doubles ? 'doubles' : 'singles',
-    teamSize: formatId.includes('1v1') ? 3 : 6,
-    roleWeights: doubles ? doublesWeights : singlesWeights,
-    warnings: formatId.includes('hackmons') || formatId.includes('metronome')
+    teamSize: id.includes('1v1') ? 3 : 6,
+    roleWeights: cloneRoleWeights(doubles ? doublesWeights : singlesWeights),
+    warnings: id.includes('hackmons') || id.includes('metronome')
       ? ['Format has unusual rules; role inference may be noisy.']
       : []
   };
