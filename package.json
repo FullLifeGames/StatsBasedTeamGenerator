@@ -7,8 +7,10 @@
     "dev": "concurrently -k \"npm:dev:api\" \"npm:dev:client\"",
     "dev:client": "vite --host 127.0.0.1",
     "dev:api": "tsx watch server/index.ts",
-    "build": "tsc -b && vite build",
-    "preview": "vite preview --host 127.0.0.1",
+    "build": "tsc --noEmit -p tsconfig.node.json && vite build",
+    "preview": "concurrently -k \"npm:preview:api\" \"npm:preview:client\"",
+    "preview:client": "vite preview --host 127.0.0.1",
+    "preview:api": "tsx server/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint ."

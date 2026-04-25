@@ -55,12 +55,18 @@ export async function fetchText(url: string): Promise<string> {
 }
 
 export async function discoverStatsIndex(fetcher: TextFetcher = fetchText): Promise<StatsIndex> {
-  const root = await readThroughCache('stats-root', 15 * 60_000, () => fetcher(STATS_ROOT));
+  const shouldCache = fetcher === fetchText;
+  const loadText = (key: string, url: string) => {
+    if (!shouldCache) return fetcher(url);
+    return readThroughCache(key, 15 * 60_000, () => fetcher(url));
+  };
+
+  const root = await loadText('stats-root', STATS_ROOT);
   const months = parseMonthListing(root);
   if (!months.length) throw new Error('No Smogon stats months found');
   const latestMonth = months[0];
   const chaosUrl = `${STATS_ROOT}${latestMonth}/chaos/`;
-  const chaos = await readThroughCache(`chaos-index:${latestMonth}`, 15 * 60_000, () => fetcher(chaosUrl));
+  const chaos = await loadText(`chaos-index:${latestMonth}`, chaosUrl);
   return {
     months,
     latestMonth,
