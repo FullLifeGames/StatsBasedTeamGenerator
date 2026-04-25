@@ -179,6 +179,11 @@ select {
   background: #f8fafc;
 }
 
+.pokemon-card--locked {
+  border-color: #0f766e;
+  background: #eefcf8;
+}
+
 .pokemon-card__topline {
   display: grid;
   grid-template-columns: 88px minmax(0, 1fr) auto;
@@ -230,6 +235,17 @@ select {
   background: #ffffff;
   color: #334155;
   cursor: pointer;
+}
+
+.pokemon-card__actions button[aria-pressed="true"] {
+  border-color: #0f766e;
+  background: #ccfbef;
+  color: #0f766e;
+}
+
+.pokemon-card__actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
 }
 
 .role-chip-list {

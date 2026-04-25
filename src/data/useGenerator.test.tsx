@@ -29,6 +29,24 @@ function testDataset(format: string, cutoff = 1500): StatsDataset {
   };
 }
 
+function lockableDataset(format: string, alphaUsage: number, cutoff = 1500): StatsDataset {
+  return {
+    ...makeDataset([
+      makePokemon({id: `${format}alpha`, name: `${format} Alpha`, usage: alphaUsage}),
+      makePokemon({id: `${format}beta`, name: `${format} Beta`, usage: 48}),
+      makePokemon({id: `${format}gamma`, name: `${format} Gamma`, usage: 47}),
+      makePokemon({id: `${format}delta`, name: `${format} Delta`, usage: 46}),
+      makePokemon({id: `${format}epsilon`, name: `${format} Epsilon`, usage: 45})
+    ]),
+    source: {
+      month: '2026-03',
+      format,
+      cutoff,
+      url: `https://www.smogon.com/stats/2026-03/chaos/${format}-${cutoff}.json`
+    }
+  };
+}
+
 function stubFetch(datasets: Record<string, StatsDataset>): void {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url === '/api/stats/index') {
@@ -129,5 +147,47 @@ describe('useGenerator', () => {
     expect(fetch).toHaveBeenCalledWith('/api/stats/2026-03/gen91v1/1500');
     expect(result.current.dataset?.source.format).toBe('gen91v1');
     expect(result.current.team?.source.format).toBe('gen91v1');
+  });
+
+  it('preserves locked members when regenerating the same selection', async () => {
+    const firstDataset = lockableDataset('gen91v1', 50);
+    const secondDataset = lockableDataset('gen91v1', 1);
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/stats/index') {
+        return {ok: true, json: () => Promise.resolve(index)};
+      }
+
+      if (url === '/api/stats/2026-03/gen91v1/1500') {
+        const dataset = (fetch as ReturnType<typeof vi.fn>).mock.calls.length <= 2
+          ? firstDataset
+          : secondDataset;
+        return {ok: true, json: () => Promise.resolve(dataset)};
+      }
+
+      return {ok: false, json: () => Promise.resolve({message: `Missing fixture for ${url}`})};
+    }));
+    const {result} = renderHook(() => useGenerator());
+
+    await waitFor(() => expect(result.current.format).toBe('gen9ou'));
+    act(() => {
+      result.current.setFormat('gen91v1');
+    });
+
+    await act(async () => {
+      await result.current.generate();
+    });
+    const lockedId = result.current.team?.members[0]?.stats.id;
+    expect(lockedId).toBe('gen91v1alpha');
+
+    act(() => {
+      result.current.toggleLock(lockedId);
+    });
+
+    await act(async () => {
+      await result.current.generate();
+    });
+
+    expect(result.current.team?.members[0]?.stats.id).toBe(lockedId);
+    expect(result.current.team?.members[0]?.locked).toBe(true);
   });
 });

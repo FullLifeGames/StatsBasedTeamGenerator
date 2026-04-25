@@ -90,4 +90,20 @@ describe('App', () => {
 
     await waitFor(() => expect(screen.getByText('Great Tusk')).toBeInTheDocument());
   });
+
+  it('marks a card as locked from the team board controls', async () => {
+    stubFetch();
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const formatSelect = await screen.findByLabelText('Format');
+    await user.selectOptions(formatSelect, 'gen91v1');
+    await user.click(screen.getByRole('button', {name: /generate team/i}));
+
+    const lockButton = await screen.findByRole('button', {name: /lock great tusk/i});
+    await user.click(lockButton);
+
+    expect(lockButton).toHaveAttribute('aria-pressed', 'true');
+  });
 });

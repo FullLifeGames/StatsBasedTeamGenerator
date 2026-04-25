@@ -16,7 +16,7 @@ export function App() {
 
       <div className="app-layout">
         <ControlRail {...generator} />
-        <TeamBoard team={generator.team} />
+        <TeamBoard team={generator.team} onToggleLock={generator.toggleLock} />
         <InsightPanel team={generator.team} />
       </div>
     </main>

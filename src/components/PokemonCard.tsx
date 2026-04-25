@@ -1,9 +1,11 @@
-import {Lock, RefreshCcw} from 'lucide-react';
+import {Lock, LockOpen, RefreshCcw} from 'lucide-react';
 import type {RoleScores, TeamMember} from '../domain/types';
 import {PokemonSprite} from './Sprite';
 
 interface PokemonCardProps {
   member: TeamMember;
+  onToggleLock?: (pokemonId: string) => void;
+  onReplace?: (pokemonId: string) => void;
 }
 
 const roleLabels: Record<keyof RoleScores, string> = {
@@ -35,11 +37,13 @@ function topRoles(roles: RoleScores): string[] {
     .map(([role]) => roleLabels[role]);
 }
 
-export function PokemonCard({member}: PokemonCardProps) {
+export function PokemonCard({member, onToggleLock, onReplace}: PokemonCardProps) {
   const roles = topRoles(member.set.roles);
+  const isLocked = Boolean(member.locked);
+  const lockLabel = `${isLocked ? 'Unlock' : 'Lock'} ${member.stats.name}`;
 
   return (
-    <article className="pokemon-card">
+    <article className={isLocked ? 'pokemon-card pokemon-card--locked' : 'pokemon-card'}>
       <div className="pokemon-card__topline">
         <PokemonSprite name={member.stats.name} />
         <div className="pokemon-card__identity">
@@ -48,10 +52,22 @@ export function PokemonCard({member}: PokemonCardProps) {
           <p>{member.set.ability || 'No ability'}</p>
         </div>
         <div className="pokemon-card__actions" aria-label={`${member.stats.name} controls`}>
-          <button type="button" aria-label={`Lock ${member.stats.name}`}>
-            <Lock size={16} aria-hidden="true" />
+          <button
+            type="button"
+            aria-label={lockLabel}
+            aria-pressed={isLocked}
+            title={lockLabel}
+            onClick={() => onToggleLock?.(member.stats.id)}
+          >
+            {isLocked ? <Lock size={16} aria-hidden="true" /> : <LockOpen size={16} aria-hidden="true" />}
           </button>
-          <button type="button" aria-label={`Replace ${member.stats.name}`}>
+          <button
+            type="button"
+            aria-label={`Replace ${member.stats.name}`}
+            title={`Replace ${member.stats.name}`}
+            disabled={!onReplace}
+            onClick={() => onReplace?.(member.stats.id)}
+          >
             <RefreshCcw size={16} aria-hidden="true" />
           </button>
         </div>

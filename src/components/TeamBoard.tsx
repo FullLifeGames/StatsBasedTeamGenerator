@@ -3,9 +3,11 @@ import {PokemonCard} from './PokemonCard';
 
 interface TeamBoardProps {
   team: GeneratedTeam | null;
+  onToggleLock?: (pokemonId: string) => void;
+  onReplace?: (pokemonId: string) => void;
 }
 
-export function TeamBoard({team}: TeamBoardProps) {
+export function TeamBoard({team, onToggleLock, onReplace}: TeamBoardProps) {
   if (!team) {
     return (
       <section className="team-board" aria-label="Generated team">
@@ -28,7 +30,12 @@ export function TeamBoard({team}: TeamBoardProps) {
 
       <div className="team-grid">
         {team.members.map(member => (
-          <PokemonCard key={member.stats.id} member={member} />
+          <PokemonCard
+            key={member.stats.id}
+            member={member}
+            onReplace={onReplace}
+            onToggleLock={onToggleLock}
+          />
         ))}
       </div>
     </section>
