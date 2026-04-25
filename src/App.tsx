@@ -1,11 +1,22 @@
+import {ControlRail} from './components/ControlRail';
+import {TeamBoard} from './components/TeamBoard';
+import {useGenerator} from './data/useGenerator';
+
 export function App() {
+  const generator = useGenerator();
+
   return (
     <main className="app-shell">
-      <section className="empty-state">
-        <p className="eyebrow">Smogon stats</p>
-        <h1>Team generator</h1>
-        <p>Scaffold ready. Data, scoring, and team generation land in the next tasks.</p>
-      </section>
+      {generator.error ? (
+        <div className="error-banner" role="alert">
+          {generator.error}
+        </div>
+      ) : null}
+
+      <div className="app-layout">
+        <ControlRail {...generator} />
+        <TeamBoard team={generator.team} />
+      </div>
     </main>
   );
 }

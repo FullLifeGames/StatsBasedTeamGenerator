@@ -81,6 +81,29 @@ describe('useGenerator', () => {
     expect(result.current.cutoff).toBe(1500);
   });
 
+  it('prefers gen9ou as the initial latest-month format when it is listed after other formats', async () => {
+    const reversedIndex: StatsIndex = {
+      ...index,
+      formats: [
+        {id: 'gen91v1', name: 'Gen 9 1v1', month: '2026-03', cutoffs: [1500]},
+        {id: 'gen9ou', name: 'Gen 9 OU', month: '2026-03', cutoffs: [1500, 1825]}
+      ]
+    };
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/stats/index') {
+        return {ok: true, json: () => Promise.resolve(reversedIndex)};
+      }
+
+      return {ok: false, json: () => Promise.resolve({message: `Missing fixture for ${url}`})};
+    }));
+
+    const {result} = renderHook(() => useGenerator());
+
+    await waitFor(() => expect(result.current.format).toBe('gen9ou'));
+    expect(result.current.cutoff).toBe(1825);
+  });
+
   it('fetches a fresh dataset when month, format, or cutoff changes before generating', async () => {
     stubFetch({
       '/api/stats/2026-03/gen9ou/1825': testDataset('gen9ou', 1825),

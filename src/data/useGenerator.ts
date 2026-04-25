@@ -25,7 +25,8 @@ function findListing(index: StatsIndex | null, month: string, format: string): F
 
 function initialSelection(index: StatsIndex): Selection {
   const month = index.latestMonth || index.months.at(-1) || '';
-  const [listing] = formatsForMonth(index, month);
+  const listings = formatsForMonth(index, month);
+  const listing = listings.find(candidate => candidate.id === 'gen9ou') ?? listings[0];
 
   return {
     month,
