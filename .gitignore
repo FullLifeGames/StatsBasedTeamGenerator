@@ -1,2 +1,8 @@
 .worktrees
 .worktrees/
+node_modules/
+dist/
+.cache/
+.superpowers/
+coverage/
+*.local
