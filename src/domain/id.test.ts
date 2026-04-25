@@ -6,6 +6,8 @@ describe('id helpers', () => {
     expect(toId('Ogerpon-Wellspring')).toBe('ogerponwellspring');
     expect(toId('Mr. Mime')).toBe('mrmime');
     expect(toId('Farfetch\u2019d')).toBe('farfetchd');
+    expect(toId('Flabébé')).toBe('flabebe');
+    expect(toId('Flabe\u0301be\u0301')).toBe('flabebe');
   });
 
   it('keeps known display names readable', () => {
