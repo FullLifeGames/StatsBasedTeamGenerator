@@ -1,4 +1,5 @@
 import {ControlRail} from './components/ControlRail';
+import {InsightPanel} from './components/InsightPanel';
 import {TeamBoard} from './components/TeamBoard';
 import {useGenerator} from './data/useGenerator';
 
@@ -16,6 +17,7 @@ export function App() {
       <div className="app-layout">
         <ControlRail {...generator} />
         <TeamBoard team={generator.team} />
+        <InsightPanel team={generator.team} />
       </div>
     </main>
   );

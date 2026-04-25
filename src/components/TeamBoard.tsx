@@ -1,4 +1,5 @@
 import type {GeneratedTeam} from '../domain/types';
+import {PokemonCard} from './PokemonCard';
 
 interface TeamBoardProps {
   team: GeneratedTeam | null;
@@ -27,10 +28,7 @@ export function TeamBoard({team}: TeamBoardProps) {
 
       <div className="team-grid">
         {team.members.map(member => (
-          <article className="member-card" key={member.stats.id}>
-            <h3>{member.stats.name}</h3>
-            <p>{member.set.item || 'No item'}</p>
-          </article>
+          <PokemonCard key={member.stats.id} member={member} />
         ))}
       </div>
     </section>
