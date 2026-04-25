@@ -123,4 +123,18 @@ describe('generateTeam', () => {
     expect(generatedGreatTusk?.set.moves).not.toContain('Stealth Rock');
     expect(generatedGreatTusk?.set.moves).toContain('Rapid Spin');
   });
+
+  it('includes archetype fit in generated team scoring', () => {
+    const dataset = makeDataset([
+      ouPokemon({id: 'pelipper', name: 'Pelipper', usage: 20, abilities: {drizzle: 100}, moves: {hurricane: 100, uturn: 80, roost: 70}}),
+      ouPokemon({id: 'barraskewda', name: 'Barraskewda', usage: 19, abilities: {swiftswim: 100}, moves: {liquidation: 100, closecombat: 90, flipturn: 80}}),
+      ouPokemon({id: 'kingambit', name: 'Kingambit', usage: 30, moves: {kowtowcleave: 100, suckerpunch: 95, ironhead: 80, swordsdance: 70}})
+    ]);
+
+    const balanced = generateTeam(dataset, 'gen91v1', {seeds: [], archetype: 'balanced', novelty: 0});
+    const weather = generateTeam(dataset, 'gen91v1', {seeds: [], archetype: 'weather', novelty: 0});
+
+    expect(weather.score.archetype).toBeGreaterThan(0);
+    expect(weather.score.total).toBeGreaterThan(balanced.score.total);
+  });
 });

@@ -67,6 +67,30 @@ describe('scoreTeam', () => {
 
     expect(commonScore).toBeLessThan(nicheScore);
   });
+
+  it('rewards teams that match the selected weather archetype', () => {
+    const setter = makePokemon({
+      id: 'pelipper',
+      name: 'Pelipper',
+      abilities: {drizzle: 100},
+      moves: {hurricane: 100, uturn: 80, roost: 70}
+    });
+    const abuser = makePokemon({
+      id: 'barraskewda',
+      name: 'Barraskewda',
+      abilities: {swiftswim: 100},
+      moves: {liquidation: 100, closecombat: 90, flipturn: 80}
+    });
+    const dataset = makeDataset([setter, abuser]);
+    const profile = inferFormatProfile('gen9ou');
+    const members = [member(setter), member(abuser)];
+
+    const balanced = scoreTeam(members, dataset, profile, 'balanced');
+    const weather = scoreTeam(members, dataset, profile, 'weather');
+
+    expect(weather.archetype).toBeGreaterThan(0);
+    expect(weather.total).toBeGreaterThan(balanced.total);
+  });
 });
 
 describe('threatCoverage', () => {

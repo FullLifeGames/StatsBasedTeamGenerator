@@ -63,8 +63,13 @@ function normalizeLockedMembers(lockedMembers: TeamMember[] | undefined): TeamMe
   }));
 }
 
-function uniqueInitialMembers(dataset: StatsDataset, profile: FormatProfile, options: GenerateOptions): TeamMember[] {
-  const selected = new Set<string>();
+function uniqueInitialMembers(
+  dataset: StatsDataset,
+  profile: FormatProfile,
+  options: GenerateOptions,
+  bannedIds: Set<string>
+): TeamMember[] {
+  const selected = new Set<string>(bannedIds);
   const members: TeamMember[] = [];
 
   for (const locked of normalizeLockedMembers(options.lockedMembers)) {
@@ -94,7 +99,7 @@ function beamSignature(members: TeamMember[]): string {
 
 function candidatePool(dataset: StatsDataset, selectedIds: Set<string>, novelty: number): PokemonStats[] {
   return sortedPokemon(dataset, novelty)
-    .filter(stats => !selectedIds.has(stats.id))
+    .filter(stats => !selectedIds.has(toId(stats.id)))
     .slice(0, candidateLimit);
 }
 
@@ -103,12 +108,14 @@ function advanceBeams(
   dataset: StatsDataset,
   profile: FormatProfile,
   targetSize: number,
-  novelty: number
+  archetype: GenerateOptions['archetype'],
+  novelty: number,
+  bannedIds: Set<string>
 ): Beam[] {
   const next: Beam[] = [];
 
   for (const beam of beams) {
-    const selectedIds = new Set(beam.members.map(member => member.stats.id));
+    const selectedIds = new Set([...bannedIds, ...beam.members.map(member => toId(member.stats.id))]);
     for (const stats of candidatePool(dataset, selectedIds, novelty)) {
       const member = memberFromStats(stats, beam.members, profile, [
         `Added from usage rank with ${stats.usage.toFixed(1)}% usage`
@@ -116,7 +123,7 @@ function advanceBeams(
       const members = [...beam.members, member];
       next.push({
         members,
-        score: scoreTeam(members, dataset, profile).total
+        score: scoreTeam(members, dataset, profile, archetype).total
       });
     }
   }
@@ -136,21 +143,23 @@ function advanceBeams(
 
 export function generateTeam(dataset: StatsDataset, formatId: string, options: GenerateOptions): GeneratedTeam {
   const profile = inferFormatProfile(formatId);
-  const targetSize = Math.min(profile.teamSize, dataset.pokemon.length);
+  const bannedIds = new Set((options.bannedMembers ?? []).map(toId));
+  const availablePokemonCount = dataset.pokemon.filter(stats => !bannedIds.has(toId(stats.id))).length;
+  const targetSize = Math.min(profile.teamSize, availablePokemonCount);
   let beams: Beam[] = [{
-    members: uniqueInitialMembers(dataset, profile, options).slice(0, targetSize),
+    members: uniqueInitialMembers(dataset, profile, options, bannedIds).slice(0, targetSize),
     score: 0
   }];
 
   while (beams[0]?.members.length < targetSize) {
-    const advanced = advanceBeams(beams, dataset, profile, targetSize, options.novelty);
+    const advanced = advanceBeams(beams, dataset, profile, targetSize, options.archetype, options.novelty, bannedIds);
     if (!advanced.length) break;
     beams = advanced;
   }
 
   const members = beams
     .sort((a, b) => b.score - a.score)[0]?.members ?? [];
-  const score = scoreTeam(members, dataset, profile);
+  const score = scoreTeam(members, dataset, profile, options.archetype);
   const importable = formatTeam({members});
 
   return attachInsights({

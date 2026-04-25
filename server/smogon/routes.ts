@@ -2,17 +2,19 @@ import type {Router} from 'express';
 import express from 'express';
 import {normalizeChaos} from '../../src/domain/normalize';
 import {readThroughCache} from './cache';
-import {discoverStatsIndex, fetchText} from './index';
+import {discoverMonthFormats, discoverStatsIndex, fetchText} from './index';
 
 interface SmogonRouterDependencies {
   cache: typeof readThroughCache;
   discover: typeof discoverStatsIndex;
+  discoverMonthFormats: typeof discoverMonthFormats;
   fetchText: typeof fetchText;
 }
 
 const defaultDependencies: SmogonRouterDependencies = {
   cache: readThroughCache,
   discover: discoverStatsIndex,
+  discoverMonthFormats,
   fetchText
 };
 
@@ -31,6 +33,22 @@ export function createSmogonRouter(dependencies: SmogonRouterDependencies = defa
     } catch (error) {
       response.status(502).json({
         message: error instanceof Error ? error.message : 'Unable to discover Smogon stats'
+      });
+    }
+  });
+
+  router.get('/stats/index/:month', async (request, response) => {
+    const {month} = request.params;
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      response.status(400).json({message: 'Invalid Smogon stats month'});
+      return;
+    }
+
+    try {
+      response.json(await dependencies.discoverMonthFormats(month));
+    } catch (error) {
+      response.status(502).json({
+        message: error instanceof Error ? error.message : 'Unable to discover Smogon month formats'
       });
     }
   });

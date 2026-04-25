@@ -1,5 +1,5 @@
 import {afterEach, describe, expect, it, vi} from 'vitest';
-import {fetchStatsDataset, fetchStatsIndex} from './api';
+import {fetchMonthFormats, fetchStatsDataset, fetchStatsIndex} from './api';
 import type {StatsIndex} from '../domain/types';
 
 function mockFetch(response: Partial<Response> & {json: () => Promise<unknown>}): void {
@@ -31,5 +31,13 @@ describe('stats API client', () => {
     });
 
     await expect(fetchStatsDataset('2026-03', 'gen91v1', 1500)).rejects.toThrow('Smogon is having a moment');
+  });
+
+  it('fetchMonthFormats(month) fetches the selected month index', async () => {
+    const formats = [{id: 'gen9ou', name: 'Gen 9 OU', month: '2026-02', cutoffs: [1500]}];
+    mockFetch({ok: true, json: () => Promise.resolve(formats)});
+
+    await expect(fetchMonthFormats('2026-02')).resolves.toBe(formats);
+    expect(fetch).toHaveBeenCalledWith('/api/stats/index/2026-02');
   });
 });

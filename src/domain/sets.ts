@@ -12,6 +12,8 @@ interface ContextMember {
 }
 
 const evLabels = ['HP', 'Atk', 'Def', 'SpA', 'SpD', 'Spe'];
+const noAbilityIds = new Set(['', 'noability', 'none']);
+const noItemIds = new Set(['', 'nothing', 'noitem', 'none']);
 
 function topEntries(table: WeightedTable, limit = 1): Array<[string, number]> {
   return Object.entries(table)
@@ -45,6 +47,18 @@ function parseSpread(spread?: string): {nature?: string; evs?: string} {
     nature,
     evs: evs.map((value, index) => `${value} ${evLabels[index]}`).join(' / ')
   };
+}
+
+function legalAbilityId(profile: FormatProfile, id: string): string {
+  return profile.gen >= 3 && !noAbilityIds.has(id) ? id : '';
+}
+
+function legalItemId(profile: FormatProfile, id: string): string {
+  return profile.gen >= 2 && !noItemIds.has(id) ? id : '';
+}
+
+function legalTeraTypeId(profile: FormatProfile, id: string): string {
+  return profile.gen >= 9 ? id : '';
 }
 
 function existingRoleScore(context: TeamContext | undefined, role: keyof RoleScores): number {
@@ -98,9 +112,12 @@ export function buildSetCandidates(stats: PokemonStats, profile: FormatProfile, 
   const [[itemId, itemWeight] = ['', 0]] = topEntries(stats.items);
   const [[spreadId, spreadWeight] = ['', 0]] = topEntries(stats.spreads);
   const [[teraTypeId, teraTypeWeight] = ['', 0]] = topEntries(stats.teraTypes);
+  const ability = legalAbilityId(profile, abilityId);
+  const item = legalItemId(profile, itemId);
+  const teraType = legalTeraTypeId(profile, teraTypeId);
   const moveIds = selectedMoveIds(stats, profile, context);
   const moveWeight = moveIds.reduce((sum, moveId) => sum + (stats.moves[moveId] ?? 0), 0);
-  const spread = parseSpread(spreadId);
+  const spread = profile.gen >= 3 ? parseSpread(spreadId) : {};
   const confidence = average([
     tableShare(stats.abilities, abilityWeight),
     tableShare(stats.items, itemWeight),
@@ -112,9 +129,9 @@ export function buildSetCandidates(stats: PokemonStats, profile: FormatProfile, 
   return [{
     pokemonId: stats.id,
     pokemonName: stats.name,
-    ability: abilityId ? dexDisplay(profile, 'ability', abilityId) : '',
-    item: itemId ? dexDisplay(profile, 'item', itemId) : '',
-    teraType: teraTypeId ? titleCase(teraTypeId) : undefined,
+    ability: ability ? dexDisplay(profile, 'ability', ability) : '',
+    item: item ? dexDisplay(profile, 'item', item) : '',
+    teraType: teraType ? titleCase(teraType) : undefined,
     nature: spread.nature,
     evs: spread.evs,
     moves: moveIds.map(moveId => dexDisplay(profile, 'move', moveId)),

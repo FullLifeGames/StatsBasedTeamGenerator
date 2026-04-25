@@ -2,7 +2,7 @@ import {describe, expect, it, vi} from 'vitest';
 import crypto from 'node:crypto';
 import {rm, stat} from 'node:fs/promises';
 import path from 'node:path';
-import {discoverStatsIndex, parseChaosListing, parseMonthListing} from './index';
+import {discoverMonthFormats, discoverStatsIndex, parseChaosListing, parseMonthListing} from './index';
 
 const rootHtml = `
   <a href="2026-02/">2026-02/</a>
@@ -78,5 +78,18 @@ describe('Smogon index discovery', () => {
         {id: 'gen9ou', cutoffs: [0, 1500, 1825]}
       ]
     });
+  });
+
+  it('fetches chaos formats for a requested older month', async () => {
+    const fetcher = vi.fn(async (url: string) => {
+      if (url === 'https://www.smogon.com/stats/2026-02/chaos/') {
+        return '<a href="gen9ou-1500.json">gen9ou-1500.json</a>';
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(discoverMonthFormats('2026-02', fetcher)).resolves.toEqual([
+      {id: 'gen9ou', name: 'Gen 9 OU', month: '2026-02', cutoffs: [1500]}
+    ]);
   });
 });

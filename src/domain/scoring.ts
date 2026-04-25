@@ -1,6 +1,7 @@
 import {scoreSetForTeamContext} from './sets';
 import type {
   FormatProfile,
+  GenerateOptions,
   GeneratedTeam,
   RoleScores,
   ScoreBreakdown,
@@ -9,6 +10,8 @@ import type {
   TeamMember,
   ThreatCoverage
 } from './types';
+
+type Archetype = GenerateOptions['archetype'];
 
 const roleKeys = [
   'physicalBreaker',
@@ -188,6 +191,35 @@ function threatScore(members: TeamMember[], dataset: StatsDataset): number {
   return clamp((coveredUsage / totalUsage) * 3, 0, 3);
 }
 
+function archetypeScore(members: TeamMember[], profile: FormatProfile, archetype: Archetype): number {
+  if (archetype === 'balanced') return 0;
+
+  const totals = roleTotals(members);
+  const teamSize = Math.max(members.length, 1);
+  const breakerPressure = totals.physicalBreaker + totals.specialBreaker;
+  let score = 0;
+
+  switch (archetype) {
+    case 'offense':
+      score = breakerPressure + totals.cleaner + totals.setup + totals.offensivePivot * 0.7;
+      break;
+    case 'bulky-offense':
+      score = breakerPressure * 0.8 + totals.defensivePivot + totals.offensivePivot + totals.hazardRemoval * 0.5;
+      break;
+    case 'stall':
+      score = totals.defensivePivot * 1.4 + totals.support + totals.status + totals.hazardRemoval + totals.hazardPreservation;
+      break;
+    case 'weather':
+      score = totals.weatherTerrainSetter * 1.8 + totals.weatherTerrainAbuser * 1.4;
+      break;
+    case 'trick-room':
+      score = totals.speedControl * 1.3 + totals.positioning + totals.spreadPressure * (profile.battleStyle === 'doubles' ? 1 : 0.5);
+      break;
+  }
+
+  return clamp((score / teamSize) * 2, 0, 3);
+}
+
 function warningList(members: TeamMember[], profile: FormatProfile): string[] {
   const warnings = [...profile.warnings];
   const ids = new Set<string>();
@@ -202,7 +234,12 @@ function warningList(members: TeamMember[], profile: FormatProfile): string[] {
   return warnings;
 }
 
-export function scoreTeam(members: TeamMember[], dataset: StatsDataset, profile: FormatProfile): ScoreBreakdown {
+export function scoreTeam(
+  members: TeamMember[],
+  dataset: StatsDataset,
+  profile: FormatProfile,
+  archetype: Archetype = 'balanced'
+): ScoreBreakdown {
   const scores = {
     usage: usageScore(members, dataset),
     setConfidence: setConfidenceScore(members),
@@ -212,7 +249,7 @@ export function scoreTeam(members: TeamMember[], dataset: StatsDataset, profile:
     typeBalance: 0,
     setToTeamFit: setToTeamFitScore(members, profile),
     duplicateRoles: duplicateRoleScore(members, profile),
-    archetype: 0
+    archetype: archetypeScore(members, profile, archetype)
   };
 
   const total = Object.values(scores).reduce((sum, value) => sum + value, 0);
@@ -227,7 +264,7 @@ export function scoreTeam(members: TeamMember[], dataset: StatsDataset, profile:
     typeBalance: scores.typeBalance,
     setToTeamFit: roundScore(scores.setToTeamFit),
     duplicateRoles: roundScore(scores.duplicateRoles),
-    archetype: scores.archetype,
+    archetype: roundScore(scores.archetype),
     warnings: warningList(members, profile)
   };
 }

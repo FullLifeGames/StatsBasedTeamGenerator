@@ -2,7 +2,7 @@ import {useCallback, useEffect, useMemo, useState} from 'react';
 import {generateTeam} from '../domain/generator';
 import {toId} from '../domain/id';
 import type {FormatListing, GenerateOptions, GeneratedTeam, StatsDataset, StatsIndex, TeamMember} from '../domain/types';
-import {fetchStatsDataset, fetchStatsIndex} from './api';
+import {fetchMonthFormats, fetchStatsDataset, fetchStatsIndex} from './api';
 
 type Archetype = GenerateOptions['archetype'];
 
@@ -22,6 +22,16 @@ function formatsForMonth(index: StatsIndex | null, month: string): FormatListing
 
 function findListing(index: StatsIndex | null, month: string, format: string): FormatListing | undefined {
   return formatsForMonth(index, month).find(listing => listing.id === format);
+}
+
+function withMonthFormats(index: StatsIndex, month: string, formats: FormatListing[]): StatsIndex {
+  return {
+    ...index,
+    formats: [
+      ...index.formats.filter(listing => listing.month !== month),
+      ...formats
+    ]
+  };
 }
 
 function initialSelection(index: StatsIndex): Selection {
@@ -120,6 +130,26 @@ export function useGenerator() {
   const setMonth = useCallback((month: string) => {
     clearGeneratedState();
     setSelection(current => validSelection(index, {...current, month}));
+
+    if (!index || formatsForMonth(index, month).length) return;
+
+    setLoading(true);
+    setError(null);
+    void fetchMonthFormats(month)
+      .then(formats => {
+        setIndex(current => {
+          if (!current) return current;
+          const nextIndex = withMonthFormats(current, month, formats);
+          setSelection(selectionCurrent => validSelection(nextIndex, selectionCurrent));
+          return nextIndex;
+        });
+      })
+      .catch(caught => {
+        setError(caught instanceof Error ? caught.message : 'Unable to load month formats');
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, [clearGeneratedState, index]);
 
   const setFormat = useCallback((format: string) => {
@@ -193,6 +223,43 @@ export function useGenerator() {
     }
   }, [archetype, lockedIds, seeds, selection.cutoff, selection.format, selection.month, team]);
 
+  const replaceMember = useCallback(async (pokemonId: string | undefined) => {
+    if (!pokemonId || !team || !selection.month || !selection.format || !selection.cutoff) return null;
+    const normalizedId = toId(pokemonId);
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const loadedDataset = await fetchStatsDataset(selection.month, selection.format, selection.cutoff);
+      const validLockedIds = new Set(
+        [...lockedIds].filter(id => id !== normalizedId && Boolean(loadedDataset.pokemonById[id]))
+      );
+      const preservedMembers = team.members
+        .filter(member => toId(member.stats.id) !== normalizedId)
+        .filter(member => Boolean(loadedDataset.pokemonById[toId(member.stats.id)]))
+        .map(member => ({...member, locked: true}));
+      const generatedTeam = generateTeam(loadedDataset, selection.format, {
+        seeds,
+        lockedMembers: preservedMembers,
+        bannedMembers: [normalizedId],
+        archetype,
+        novelty: 0
+      });
+      const teamWithLockedFlags = withLockedFlags(generatedTeam, validLockedIds);
+
+      setDataset(loadedDataset);
+      setLockedIds(validLockedIds);
+      setTeam(teamWithLockedFlags);
+      return teamWithLockedFlags;
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to replace a team member');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [archetype, lockedIds, seeds, selection.cutoff, selection.format, selection.month, team]);
+
   const availableFormats = useMemo(() => formatsForMonth(index, selection.month), [index, selection.month]);
   const availableCutoffs = useMemo(
     () => findListing(index, selection.month, selection.format)?.cutoffs ?? [],
@@ -218,6 +285,7 @@ export function useGenerator() {
     setSeeds,
     setArchetype,
     toggleLock,
+    replaceMember,
     generate
   };
 }

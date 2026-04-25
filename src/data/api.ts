@@ -1,4 +1,4 @@
-import type {StatsDataset, StatsIndex} from '../domain/types';
+import type {FormatListing, StatsDataset, StatsIndex} from '../domain/types';
 
 function isMessageBody(body: unknown): body is {message: string} {
   return typeof body === 'object' && body !== null && 'message' in body && typeof body.message === 'string';
@@ -20,6 +20,10 @@ async function readJson<T>(response: Response): Promise<T> {
 
 export async function fetchStatsIndex(): Promise<StatsIndex> {
   return readJson<StatsIndex>(await fetch('/api/stats/index'));
+}
+
+export async function fetchMonthFormats(month: string): Promise<FormatListing[]> {
+  return readJson<FormatListing[]>(await fetch(`/api/stats/index/${encodeURIComponent(month)}`));
 }
 
 export async function fetchStatsDataset(month: string, format: string, cutoff: number): Promise<StatsDataset> {

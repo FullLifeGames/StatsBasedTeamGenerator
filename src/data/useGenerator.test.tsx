@@ -149,6 +149,46 @@ describe('useGenerator', () => {
     expect(result.current.team?.source.format).toBe('gen91v1');
   });
 
+  it('loads format listings on demand when an older month is selected', async () => {
+    const partialIndex: StatsIndex = {
+      months: ['2026-02', '2026-03'],
+      latestMonth: '2026-03',
+      formats: [
+        {id: 'gen9ou', name: 'Gen 9 OU', month: '2026-03', cutoffs: [1500, 1825]}
+      ]
+    };
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/stats/index') {
+        return {ok: true, json: () => Promise.resolve(partialIndex)};
+      }
+
+      if (url === '/api/stats/index/2026-02') {
+        return {
+          ok: true,
+          json: () => Promise.resolve([
+            {id: 'gen9ou', name: 'Gen 9 OU', month: '2026-02', cutoffs: [1500]}
+          ])
+        };
+      }
+
+      return {ok: false, json: () => Promise.resolve({message: `Missing fixture for ${url}`})};
+    }));
+    const {result} = renderHook(() => useGenerator());
+
+    await waitFor(() => expect(result.current.month).toBe('2026-03'));
+
+    act(() => {
+      result.current.setMonth('2026-02');
+    });
+
+    await waitFor(() => expect(result.current.availableFormats).toHaveLength(1));
+    expect(fetch).toHaveBeenCalledWith('/api/stats/index/2026-02');
+    expect(result.current.month).toBe('2026-02');
+    expect(result.current.format).toBe('gen9ou');
+    expect(result.current.cutoff).toBe(1500);
+  });
+
   it('preserves locked members when regenerating the same selection', async () => {
     const firstDataset = lockableDataset('gen91v1', 50);
     const secondDataset = lockableDataset('gen91v1', 1);
@@ -189,5 +229,33 @@ describe('useGenerator', () => {
 
     expect(result.current.team?.members[0]?.stats.id).toBe(lockedId);
     expect(result.current.team?.members[0]?.locked).toBe(true);
+  });
+
+  it('replaces one member while preserving the rest of the generated team', async () => {
+    stubFetch({
+      '/api/stats/2026-03/gen91v1/1500': lockableDataset('gen91v1', 50)
+    });
+    const {result} = renderHook(() => useGenerator());
+
+    await waitFor(() => expect(result.current.format).toBe('gen9ou'));
+    act(() => {
+      result.current.setFormat('gen91v1');
+    });
+
+    await act(async () => {
+      await result.current.generate();
+    });
+    const originalIds = result.current.team?.members.map(member => member.stats.id) ?? [];
+    const replacedId = originalIds[0];
+
+    await act(async () => {
+      await result.current.replaceMember(replacedId);
+    });
+
+    const nextIds = result.current.team?.members.map(member => member.stats.id) ?? [];
+    expect(nextIds).not.toContain(replacedId);
+    expect(nextIds).toContain(originalIds[1]);
+    expect(nextIds).toContain(originalIds[2]);
+    expect(nextIds).toHaveLength(originalIds.length);
   });
 });

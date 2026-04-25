@@ -8,7 +8,7 @@ function setFrom(member: ImportableMember): SetCandidate {
 }
 
 export function formatSet(set: SetCandidate): string {
-  const lines = [`${set.pokemonName} @ ${set.item}`];
+  const lines = [set.item ? `${set.pokemonName} @ ${set.item}` : set.pokemonName];
 
   if (set.ability) lines.push(`Ability: ${set.ability}`);
   if (set.teraType) lines.push(`Tera Type: ${set.teraType}`);

@@ -54,22 +54,35 @@ export async function fetchText(url: string): Promise<string> {
   return response.text();
 }
 
-export async function discoverStatsIndex(fetcher: TextFetcher = fetchText): Promise<StatsIndex> {
+function textLoader(fetcher: TextFetcher): (key: string, url: string) => Promise<string> {
   const shouldCache = fetcher === fetchText;
-  const loadText = (key: string, url: string) => {
+
+  return (key: string, url: string) => {
     if (!shouldCache) return fetcher(url);
     return readThroughCache(key, 15 * 60_000, () => fetcher(url));
   };
+}
+
+export async function discoverMonthFormats(
+  month: string,
+  fetcher: TextFetcher = fetchText
+): Promise<FormatListing[]> {
+  const loadText = textLoader(fetcher);
+  const chaosUrl = `${STATS_ROOT}${month}/chaos/`;
+  const chaos = await loadText(`chaos-index:${month}`, chaosUrl);
+  return parseChaosListing(chaos, month);
+}
+
+export async function discoverStatsIndex(fetcher: TextFetcher = fetchText): Promise<StatsIndex> {
+  const loadText = textLoader(fetcher);
 
   const root = await loadText('stats-root', STATS_ROOT);
   const months = parseMonthListing(root);
   if (!months.length) throw new Error('No Smogon stats months found');
   const latestMonth = months[0];
-  const chaosUrl = `${STATS_ROOT}${latestMonth}/chaos/`;
-  const chaos = await loadText(`chaos-index:${latestMonth}`, chaosUrl);
   return {
     months,
     latestMonth,
-    formats: parseChaosListing(chaos, latestMonth)
+    formats: await discoverMonthFormats(latestMonth, fetcher)
   };
 }

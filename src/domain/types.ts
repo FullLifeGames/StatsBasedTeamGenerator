@@ -161,6 +161,7 @@ export interface SynergyInsight {
 export interface GenerateOptions {
   seeds: string[];
   lockedMembers?: TeamMember[];
+  bannedMembers?: string[];
   archetype: 'balanced' | 'offense' | 'bulky-offense' | 'stall' | 'weather' | 'trick-room';
   novelty: number;
 }

@@ -23,6 +23,28 @@ describe('formatSet', () => {
     expect(text).toContain('Tera Type: Steel');
     expect(text).toContain('- Rapid Spin');
   });
+
+  it('omits old-generation sentinel ability, item, EV, nature, and tera fields', () => {
+    const [set] = buildSetCandidates(makePokemon({
+      id: 'tauros',
+      name: 'Tauros',
+      abilities: {noability: 100},
+      items: {nothing: 100},
+      spreads: {'Serious:252/252/252/252/252/252': 100},
+      moves: {bodyslam: 100, hyperbeam: 95, earthquake: 90, blizzard: 80},
+      teraTypes: {}
+    }), inferFormatProfile('gen1ou'));
+
+    const text = formatSet(set);
+
+    expect(text).toContain('Tauros\n');
+    expect(text).not.toContain('@ Nothing');
+    expect(text).not.toContain('Ability: No Ability');
+    expect(text).not.toContain('EVs:');
+    expect(text).not.toContain('Nature');
+    expect(text).not.toContain('Tera Type:');
+    expect(text).toContain('- Body Slam');
+  });
 });
 
 describe('formatTeam', () => {

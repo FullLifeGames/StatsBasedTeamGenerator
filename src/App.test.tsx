@@ -106,4 +106,17 @@ describe('App', () => {
 
     expect(lockButton).toHaveAttribute('aria-pressed', 'true');
   });
+
+  it('enables card replacement controls after generation', async () => {
+    stubFetch();
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const formatSelect = await screen.findByLabelText('Format');
+    await user.selectOptions(formatSelect, 'gen91v1');
+    await user.click(screen.getByRole('button', {name: /generate team/i}));
+
+    expect(await screen.findByRole('button', {name: /replace great tusk/i})).toBeEnabled();
+  });
 });
