@@ -129,9 +129,13 @@ export function useGenerator() {
 
   const setMonth = useCallback((month: string) => {
     clearGeneratedState();
-    setSelection(current => validSelection(index, {...current, month}));
+    const hasLoadedFormats = Boolean(index && formatsForMonth(index, month).length);
+    setSelection(current => {
+      const next = {...current, month};
+      return hasLoadedFormats ? validSelection(index, next) : next;
+    });
 
-    if (!index || formatsForMonth(index, month).length) return;
+    if (!index || hasLoadedFormats) return;
 
     setLoading(true);
     setError(null);
@@ -146,6 +150,7 @@ export function useGenerator() {
       })
       .catch(caught => {
         setError(caught instanceof Error ? caught.message : 'Unable to load month formats');
+        setSelection(current => current.month === month ? {...current, format: '', cutoff: 0} : current);
       })
       .finally(() => {
         setLoading(false);

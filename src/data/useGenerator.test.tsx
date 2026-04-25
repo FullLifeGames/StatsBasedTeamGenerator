@@ -167,6 +167,7 @@ describe('useGenerator', () => {
         return {
           ok: true,
           json: () => Promise.resolve([
+            {id: 'gen1nc1997', name: 'Gen 1 Nintendo Cup 1997', month: '2026-02', cutoffs: [1500]},
             {id: 'gen9ou', name: 'Gen 9 OU', month: '2026-02', cutoffs: [1500]}
           ])
         };
@@ -182,7 +183,7 @@ describe('useGenerator', () => {
       result.current.setMonth('2026-02');
     });
 
-    await waitFor(() => expect(result.current.availableFormats).toHaveLength(1));
+    await waitFor(() => expect(result.current.availableFormats).toHaveLength(2));
     expect(fetch).toHaveBeenCalledWith('/api/stats/index/2026-02');
     expect(result.current.month).toBe('2026-02');
     expect(result.current.format).toBe('gen9ou');
