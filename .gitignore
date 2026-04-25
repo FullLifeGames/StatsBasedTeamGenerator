@@ -3,6 +3,8 @@
 node_modules/
 dist/
 .cache/
+.codex-chrome-profile/
+.codex-logs/
 .superpowers/
 coverage/
 *.local
