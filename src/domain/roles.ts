@@ -10,7 +10,7 @@ const setupMoves = new Set(['swordsdance', 'nastyplot', 'dragondance', 'calmmind
 const statusMoves = new Set(['toxic', 'willowisp', 'thunderwave', 'spore', 'stunspore', 'glare']);
 const itemDisruptionMoves = new Set(['knockoff', 'trick', 'switcheroo']);
 
-function hasWeightedMove(stats: PokemonStats, moves: Set<string>): number {
+export function hasWeightedMove(stats: PokemonStats, moves: Set<string>): number {
   const total = Object.values(stats.moves).reduce((sum, value) => sum + value, 0);
   if (!total) return 0;
   const score = Object.entries(stats.moves)
@@ -19,7 +19,7 @@ function hasWeightedMove(stats: PokemonStats, moves: Set<string>): number {
   return Math.min(1, score / Math.max(total / 4, 1));
 }
 
-function abilityHas(stats: PokemonStats, ids: string[]): boolean {
+export function abilityHas(stats: PokemonStats, ids: string[]): boolean {
   return ids.some(id => stats.abilities[id] > 0);
 }
 
