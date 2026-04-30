@@ -1,4 +1,5 @@
 import type {GeneratedTeam} from '../domain/types';
+import {CopyImportableButton} from './CopyImportableButton';
 import {PokemonCard} from './PokemonCard';
 
 interface TeamBoardProps {
@@ -30,16 +31,19 @@ export function TeamBoard({team, onToggleLock, onReplace}: TeamBoardProps) {
             {team.source.format} at {team.source.cutoff}
           </p>
         </div>
-        <dl className="team-board__metrics" aria-label="Team summary">
-          <div>
-            <dt>Score</dt>
-            <dd>{team.score.total.toFixed(1)}</dd>
-          </div>
-          <div>
-            <dt>Threats</dt>
-            <dd>{coveredThreats}/{team.threats.length}</dd>
-          </div>
-        </dl>
+        <div className="team-board__summary-actions">
+          <dl className="team-board__metrics" aria-label="Team summary">
+            <div>
+              <dt>Score</dt>
+              <dd>{team.score.total.toFixed(1)}</dd>
+            </div>
+            <div>
+              <dt>Threats</dt>
+              <dd>{coveredThreats}/{team.threats.length}</dd>
+            </div>
+          </dl>
+          <CopyImportableButton importable={team.importable} />
+        </div>
       </div>
 
       <div className="team-grid">

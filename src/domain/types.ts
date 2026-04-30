@@ -49,6 +49,7 @@ export interface PokemonStats {
   teraTypes: WeightedTable;
   teammates: WeightedTable;
   checks: CounterEdge[];
+  analysisSets?: AnalysisSetTemplate[];
 }
 
 export interface StatsDataset {
@@ -90,6 +91,7 @@ export interface FormatProfile {
   gen: number;
   battleStyle: BattleStyle;
   teamSize: number;
+  itemClause: boolean;
   roleWeights: RoleWeights;
   warnings: string[];
 }
@@ -99,6 +101,7 @@ export interface SetCandidate {
   pokemonName: string;
   ability: string;
   item: string;
+  itemId?: string;
   teraType?: string;
   nature?: string;
   evs?: string;
@@ -112,6 +115,18 @@ export interface SetCandidate {
     moves: number;
     spread: number;
   };
+  source?: 'stats' | 'analysis';
+  setName?: string;
+}
+
+export interface AnalysisSetTemplate {
+  name?: string;
+  ability?: string;
+  item?: string;
+  teraType?: string;
+  nature?: string;
+  evs?: Partial<Record<'hp' | 'atk' | 'def' | 'spa' | 'spd' | 'spe', number>>;
+  moves: string[];
 }
 
 export interface TeamMember {
@@ -135,6 +150,12 @@ export interface ScoreBreakdown {
   warnings: string[];
 }
 
+export interface TeamValidation {
+  status: 'valid' | 'invalid' | 'unavailable';
+  formatName?: string;
+  problems: string[];
+}
+
 export interface GeneratedTeam {
   members: TeamMember[];
   score: ScoreBreakdown;
@@ -142,6 +163,7 @@ export interface GeneratedTeam {
   threats: ThreatCoverage[];
   synergy: SynergyInsight[];
   source: SourceMeta;
+  validation?: TeamValidation;
 }
 
 export interface ThreatCoverage {
@@ -164,4 +186,5 @@ export interface GenerateOptions {
   bannedMembers?: string[];
   archetype: 'balanced' | 'offense' | 'bulky-offense' | 'stall' | 'weather' | 'trick-room';
   novelty: number;
+  randomSeed?: number;
 }

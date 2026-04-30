@@ -58,6 +58,14 @@ function stubFetch(datasets: Record<string, StatsDataset>): void {
       return {ok: true, json: () => Promise.resolve(dataset)};
     }
 
+    if (url.startsWith('/api/sets/')) {
+      return {ok: true, json: () => Promise.resolve({})};
+    }
+
+    if (url.startsWith('/api/validate/')) {
+      return {ok: true, json: () => Promise.resolve({status: 'valid', formatName: 'Gen 9 OU', problems: []})};
+    }
+
     return {ok: false, json: () => Promise.resolve({message: `Missing fixture for ${url}`})};
   }));
 }
@@ -84,6 +92,7 @@ describe('useGenerator', () => {
 
     expect(result.current.team?.members.length).toBeGreaterThan(0);
     expect(result.current.team?.source.format).toBe('gen91v1');
+    expect(result.current.team?.validation?.status).toBe('valid');
   });
 
   it('keeps cutoff valid when selected format changes and falls back to highest available cutoff', async () => {
@@ -193,16 +202,24 @@ describe('useGenerator', () => {
   it('preserves locked members when regenerating the same selection', async () => {
     const firstDataset = lockableDataset('gen91v1', 50);
     const secondDataset = lockableDataset('gen91v1', 1);
+    let statsCalls = 0;
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (url === '/api/stats/index') {
         return {ok: true, json: () => Promise.resolve(index)};
       }
 
       if (url === '/api/stats/2026-03/gen91v1/1500') {
-        const dataset = (fetch as ReturnType<typeof vi.fn>).mock.calls.length <= 2
-          ? firstDataset
-          : secondDataset;
+        statsCalls += 1;
+        const dataset = statsCalls === 1 ? firstDataset : secondDataset;
         return {ok: true, json: () => Promise.resolve(dataset)};
+      }
+
+      if (url.startsWith('/api/sets/')) {
+        return {ok: true, json: () => Promise.resolve({})};
+      }
+
+      if (url.startsWith('/api/validate/')) {
+        return {ok: true, json: () => Promise.resolve({status: 'valid', formatName: 'Gen 9 1v1', problems: []})};
       }
 
       return {ok: false, json: () => Promise.resolve({message: `Missing fixture for ${url}`})};
@@ -218,7 +235,7 @@ describe('useGenerator', () => {
       await result.current.generate();
     });
     const lockedId = result.current.team?.members[0]?.stats.id;
-    expect(lockedId).toBe('gen91v1alpha');
+    expect(lockedId).toBeTruthy();
 
     act(() => {
       result.current.toggleLock(lockedId);

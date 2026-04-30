@@ -19,6 +19,8 @@
     "@pkmn/data": "^0.10.7",
     "@pkmn/dex": "^0.10.7",
     "@pkmn/img": "^0.3.3",
+    "@pkmn/sim": "^0.10.7",
+    "@pkmn/smogon": "^0.5.29",
     "cors": "^2.8.5",
     "express": "^4.19.2",
     "lucide-react": "^0.468.0",

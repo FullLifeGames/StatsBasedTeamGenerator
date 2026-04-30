@@ -138,6 +138,26 @@ select {
   cursor: pointer;
 }
 
+.theme-toggle,
+.copy-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 11px;
+  border: 1px solid #cbd5df;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #334155;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.theme-toggle {
+  width: 100%;
+}
+
 .generate-button:disabled {
   background: #9aa6b2;
   cursor: not-allowed;
@@ -154,6 +174,12 @@ select {
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 16px;
+}
+
+.team-board__summary-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .team-board__header h2 {
@@ -286,6 +312,11 @@ select {
   overflow-wrap: anywhere;
 }
 
+.pokemon-card__evs {
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
 .pokemon-card__actions {
   display: grid;
   gap: 6px;
@@ -406,6 +437,13 @@ select {
   gap: 10px;
 }
 
+.insight-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .insight-section h3 {
   font-size: 0.92rem;
 }
@@ -417,7 +455,7 @@ select {
 }
 
 .score-row,
-.threat-list li,
+.threat-list__main,
 .synergy-list li {
   display: flex;
   align-items: center;
@@ -471,6 +509,18 @@ select {
   overflow-wrap: anywhere;
 }
 
+.threat-list li {
+  display: grid;
+  gap: 4px;
+}
+
+.threat-answer {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
 .synergy-list span {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -479,6 +529,26 @@ select {
 .synergy-list strong {
   color: #d97706;
   font-size: 0.76rem;
+}
+
+.validation-summary {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  color: #0f766e;
+}
+
+.validation-summary--invalid,
+.validation-summary--unavailable {
+  color: #b45309;
+}
+
+.validation-summary p {
+  margin: 2px 0 0;
+  color: #64748b;
+  font-size: 0.78rem;
+  line-height: 1.35;
 }
 
 .status-pill {
@@ -519,6 +589,89 @@ select {
   font-weight: 700;
 }
 
+.app-shell--dark {
+  color: #d9e2ec;
+  background:
+    linear-gradient(180deg, rgba(17, 24, 39, 0.96), rgba(12, 18, 28, 0.98)),
+    #111827;
+}
+
+.app-shell--dark .control-rail,
+.app-shell--dark .team-board,
+.app-shell--dark .insight-panel {
+  border-color: #334155;
+  background: #17202d;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.25);
+}
+
+.app-shell--dark .control-rail__header h1,
+.app-shell--dark .team-board__header h2,
+.app-shell--dark .team-board__empty h2,
+.app-shell--dark .insight-panel h2,
+.app-shell--dark .insight-section h3,
+.app-shell--dark .pokemon-card__identity h3,
+.app-shell--dark .team-board__metrics dd,
+.app-shell--dark .score-row dd {
+  color: #f8fafc;
+}
+
+.app-shell--dark .field,
+.app-shell--dark .team-board__header p,
+.app-shell--dark .pokemon-card__identity p,
+.app-shell--dark .score-row dt,
+.app-shell--dark .insight-panel__header p,
+.app-shell--dark .insight-kicker,
+.app-shell--dark .threat-answer,
+.app-shell--dark .validation-summary p {
+  color: #a8b6c7;
+}
+
+.app-shell--dark .control-rail__meta span,
+.app-shell--dark .team-board__metrics div,
+.app-shell--dark .score-row,
+.app-shell--dark .team-board__empty,
+.app-shell--dark .insight-empty,
+.app-shell--dark .pokemon-sprite {
+  border-color: #334155;
+  background: #111827;
+}
+
+.app-shell--dark .field select,
+.app-shell--dark .theme-toggle,
+.app-shell--dark .copy-button,
+.app-shell--dark .pokemon-card__actions button,
+.app-shell--dark .move-list li,
+.app-shell--dark .threat-list li,
+.app-shell--dark .synergy-list li,
+.app-shell--dark .warning-list li,
+.app-shell--dark .showdown-import {
+  border-color: #3f4f63;
+  background: #0f172a;
+  color: #e5edf6;
+}
+
+.app-shell--dark .pokemon-card {
+  border-color: #334155;
+  background: #111827;
+}
+
+.app-shell--dark .pokemon-card--locked {
+  border-color: #2dd4bf;
+  background: #112621;
+}
+
+.app-shell--dark .role-chip {
+  border-color: #2dd4bf;
+  background: #123b36;
+  color: #99f6e4;
+}
+
+.app-shell--dark .role-chip--muted {
+  border-color: #3f4f63;
+  background: #1f2937;
+  color: #a8b6c7;
+}
+
 @media (max-width: 1120px) {
   .app-layout {
     grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
@@ -546,6 +699,11 @@ select {
   .team-board__header {
     display: grid;
     gap: 4px;
+  }
+
+  .team-board__summary-actions {
+    display: grid;
+    gap: 8px;
   }
 
   .team-board__metrics {

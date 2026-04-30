@@ -1,4 +1,4 @@
-import {WandSparkles} from 'lucide-react';
+import {Moon, Sun, WandSparkles} from 'lucide-react';
 import type {useGenerator} from '../data/useGenerator';
 
 type GeneratorState = ReturnType<typeof useGenerator>;
@@ -19,6 +19,11 @@ type ControlRailProps = Pick<
   | 'setArchetype'
   | 'generate'
 >;
+
+interface ThemeProps {
+  darkMode: boolean;
+  onToggleDarkMode: () => void;
+}
 
 const archetypes: Array<{value: GeneratorState['archetype']; label: string}> = [
   {value: 'balanced', label: 'Balanced'},
@@ -42,8 +47,10 @@ export function ControlRail({
   setFormat,
   setCutoff,
   setArchetype,
-  generate
-}: ControlRailProps) {
+  generate,
+  darkMode,
+  onToggleDarkMode
+}: ControlRailProps & ThemeProps) {
   const months = index?.months ?? [];
   const canGenerate = Boolean(format) && !loading;
 
@@ -57,6 +64,16 @@ export function ControlRail({
         <span>{availableFormats.length} formats</span>
         <span>{availableCutoffs.length} cutoffs</span>
       </div>
+
+      <button
+        className="theme-toggle"
+        type="button"
+        aria-label={darkMode ? 'Light mode' : 'Dark mode'}
+        onClick={onToggleDarkMode}
+      >
+        {darkMode ? <Sun aria-hidden="true" size={17} /> : <Moon aria-hidden="true" size={17} />}
+        {darkMode ? 'Light mode' : 'Dark mode'}
+      </button>
 
       <label className="field">
         <span>Month</span>
@@ -87,7 +104,7 @@ export function ControlRail({
       <label className="field">
         <span>Rating cutoff</span>
         <select
-          value={cutoff ? String(cutoff) : ''}
+          value={Number.isFinite(cutoff) ? String(cutoff) : ''}
           onChange={event => setCutoff(Number(event.target.value))}
           disabled={loading || !availableCutoffs.length}
         >

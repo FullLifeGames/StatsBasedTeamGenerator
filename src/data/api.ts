@@ -1,4 +1,4 @@
-import type {FormatListing, StatsDataset, StatsIndex} from '../domain/types';
+import type {AnalysisSetTemplate, FormatListing, StatsDataset, StatsIndex, TeamValidation} from '../domain/types';
 
 function isMessageBody(body: unknown): body is {message: string} {
   return typeof body === 'object' && body !== null && 'message' in body && typeof body.message === 'string';
@@ -35,4 +35,23 @@ export async function fetchStatsDataset(month: string, format: string, cutoff: n
   ].join('/');
 
   return readJson<StatsDataset>(await fetch(path));
+}
+
+export async function fetchAnalysisSetTemplates(
+  format: string,
+  pokemon: string[]
+): Promise<Record<string, AnalysisSetTemplate[]>> {
+  return readJson<Record<string, AnalysisSetTemplate[]>>(await fetch(`/api/sets/${encodeURIComponent(format)}`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({pokemon})
+  }));
+}
+
+export async function fetchTeamValidation(format: string, importable: string): Promise<TeamValidation> {
+  return readJson<TeamValidation>(await fetch(`/api/validate/${encodeURIComponent(format)}`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({importable})
+  }));
 }

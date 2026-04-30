@@ -1,4 +1,6 @@
+import {AlertTriangle, ShieldCheck} from 'lucide-react';
 import type {GeneratedTeam, ScoreBreakdown} from '../domain/types';
+import {CopyImportableButton} from './CopyImportableButton';
 
 interface InsightPanelProps {
   team: GeneratedTeam | null;
@@ -63,12 +65,19 @@ export function InsightPanel({team}: InsightPanelProps) {
           {coveredThreats}/{team.threats.length} tracked threats covered
         </p>
         <ul className="threat-list">
-          {team.threats.slice(0, 5).map(threat => (
+          {team.threats.map(threat => (
             <li key={threat.threatId}>
-              <span>{threat.threatName}</span>
-              <strong className={threat.covered ? 'status-pill status-pill--covered' : 'status-pill status-pill--open'}>
-                {threat.covered ? 'Covered' : 'Open'}
-              </strong>
+              <div className="threat-list__main">
+                <span>{threat.threatName}</span>
+                <strong className={threat.covered ? 'status-pill status-pill--covered' : 'status-pill status-pill--open'}>
+                  {threat.covered ? 'Covered' : 'Open'}
+                </strong>
+              </div>
+              <p className="threat-answer">
+                {threat.answers.length
+                  ? `Covered by ${threat.answers.slice(0, 3).map(answer => `${answer.pokemonName} ${formatScore(answer.confidence)}`).join(', ')}`
+                  : 'No reliable answer found'}
+              </p>
             </li>
           ))}
         </ul>
@@ -99,8 +108,36 @@ export function InsightPanel({team}: InsightPanelProps) {
         </section>
       ) : null}
 
+      {team.validation ? (
+        <section className="insight-section" aria-labelledby="validation-heading">
+          <div className={`validation-summary validation-summary--${team.validation.status}`}>
+            {team.validation.status === 'valid'
+              ? <ShieldCheck aria-hidden="true" size={18} />
+              : <AlertTriangle aria-hidden="true" size={18} />}
+            <div>
+              <h3 id="validation-heading">Showdown validation</h3>
+              <p>{team.validation.status === 'valid'
+                ? `Legal for ${team.validation.formatName ?? 'selected format'}`
+                : team.validation.status === 'invalid'
+                  ? `Needs fixes for ${team.validation.formatName ?? 'selected format'}`
+                  : 'Validator unavailable for this format'}</p>
+            </div>
+          </div>
+          {team.validation.problems.length ? (
+            <ul className="warning-list">
+              {team.validation.problems.slice(0, 5).map(problem => (
+                <li key={problem}>{problem}</li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      ) : null}
+
       <section className="insight-section" aria-labelledby="import-heading">
-        <h3 id="import-heading">Showdown import</h3>
+        <div className="insight-section__header">
+          <h3 id="import-heading">Showdown import</h3>
+          <CopyImportableButton importable={team.importable} />
+        </div>
         <textarea
           aria-labelledby="import-heading"
           className="showdown-import"

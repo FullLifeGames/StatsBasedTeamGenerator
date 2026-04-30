@@ -1,4 +1,5 @@
 import {scoreSetForTeamContext} from './sets';
+import {unsupportedTerrainSeedWarnings} from './fieldSupport';
 import type {
   FormatProfile,
   GenerateOptions,
@@ -87,7 +88,7 @@ function confidenceForThreat(edge: {samples: number; probability: number; deviat
   return edge.probability * Math.min(1, edge.samples / 40) * (1 - Math.min(0.5, edge.deviation));
 }
 
-export function threatCoverage(members: TeamMember[], dataset: StatsDataset, limit = 12): ThreatCoverage[] {
+export function threatCoverage(members: TeamMember[], dataset: StatsDataset, limit = 24): ThreatCoverage[] {
   const teamIds = new Set(members.map(member => member.stats.id));
   const threats = dataset.pokemon
     .filter(stats => !teamIds.has(stats.id))
@@ -172,6 +173,8 @@ function setToTeamFitScore(members: TeamMember[], profile: FormatProfile): numbe
     score += scoreSetForTeamContext(members[index].set, previousSetRoles, profile);
   }
 
+  score -= unsupportedTerrainSeedWarnings(members).length * 1.5;
+
   return clamp(score, -5, 5);
 }
 
@@ -230,6 +233,8 @@ function warningList(members: TeamMember[], profile: FormatProfile): string[] {
     }
     ids.add(member.stats.id);
   }
+
+  warnings.push(...unsupportedTerrainSeedWarnings(members));
 
   return warnings;
 }

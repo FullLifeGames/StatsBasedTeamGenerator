@@ -3,19 +3,25 @@ import express from 'express';
 import {normalizeChaos} from '../../src/domain/normalize';
 import {readThroughCache} from './cache';
 import {discoverMonthFormats, discoverStatsIndex, fetchText} from './index';
+import {fetchAnalysisSetTemplates} from './sets';
+import {validateShowdownImport} from './validation';
 
 interface SmogonRouterDependencies {
   cache: typeof readThroughCache;
   discover: typeof discoverStatsIndex;
   discoverMonthFormats: typeof discoverMonthFormats;
   fetchText: typeof fetchText;
+  fetchAnalysisSetTemplates: typeof fetchAnalysisSetTemplates;
+  validateShowdownImport: typeof validateShowdownImport;
 }
 
 const defaultDependencies: SmogonRouterDependencies = {
   cache: readThroughCache,
   discover: discoverStatsIndex,
   discoverMonthFormats,
-  fetchText
+  fetchText,
+  fetchAnalysisSetTemplates,
+  validateShowdownImport
 };
 
 export function isValidStatsRequest(month: string, format: string, cutoff: string): boolean {
@@ -24,8 +30,24 @@ export function isValidStatsRequest(month: string, format: string, cutoff: strin
   return Number.isSafeInteger(cutoffNumber) && cutoffNumber >= 0;
 }
 
+export function isValidSetRequest(format: string, pokemon: unknown): pokemon is string[] {
+  return /^[a-z0-9]+$/.test(format)
+    && Array.isArray(pokemon)
+    && pokemon.length <= 80
+    && pokemon.every(name => typeof name === 'string' && name.length > 0 && name.length <= 80);
+}
+
+export function isValidValidationRequest(format: string, importable: unknown): importable is string {
+  return /^[a-z0-9]+$/.test(format)
+    && typeof importable === 'string'
+    && importable.length > 0
+    && importable.length <= 30_000;
+}
+
 export function createSmogonRouter(dependencies: SmogonRouterDependencies = defaultDependencies): Router {
   const router = express.Router();
+
+  router.use(express.json({limit: '128kb'}));
 
   router.get('/stats/index', async (_request, response) => {
     try {
@@ -73,6 +95,36 @@ export function createSmogonRouter(dependencies: SmogonRouterDependencies = defa
         message: error instanceof Error ? error.message : 'Unable to fetch Smogon chaos data'
       });
     }
+  });
+
+  router.post('/sets/:format', async (request, response) => {
+    const {format} = request.params;
+    const pokemon = (request.body as {pokemon?: unknown}).pokemon;
+
+    if (!isValidSetRequest(format, pokemon)) {
+      response.status(400).json({message: 'Invalid Smogon set request'});
+      return;
+    }
+
+    try {
+      response.json(await dependencies.fetchAnalysisSetTemplates(format, pokemon));
+    } catch (error) {
+      response.status(502).json({
+        message: error instanceof Error ? error.message : 'Unable to fetch Smogon set data'
+      });
+    }
+  });
+
+  router.post('/validate/:format', (request, response) => {
+    const {format} = request.params;
+    const importable = (request.body as {importable?: unknown}).importable;
+
+    if (!isValidValidationRequest(format, importable)) {
+      response.status(400).json({message: 'Invalid Showdown validation request'});
+      return;
+    }
+
+    response.json(dependencies.validateShowdownImport(format, importable));
   });
 
   return router;

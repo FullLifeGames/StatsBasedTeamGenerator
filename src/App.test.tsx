@@ -10,7 +10,7 @@ const index: StatsIndex = {
   latestMonth: '2026-03',
   formats: [
     {id: 'gen9ou', name: 'Gen 9 OU', month: '2026-03', cutoffs: [1825]},
-    {id: 'gen91v1', name: 'Gen 9 1v1', month: '2026-03', cutoffs: [1500]}
+    {id: 'gen91v1', name: 'Gen 9 1v1', month: '2026-03', cutoffs: [1500, 0]}
   ]
 };
 
@@ -65,6 +65,17 @@ function stubFetch(): void {
       return {ok: true, json: () => Promise.resolve(oneVsOneDataset)};
     }
 
+    if (url === '/api/stats/2026-03/gen91v1/0') {
+      return {ok: true, json: () => Promise.resolve({
+        ...oneVsOneDataset,
+        source: {...oneVsOneDataset.source, cutoff: 0}
+      })};
+    }
+
+    if (url.startsWith('/api/sets/')) {
+      return {ok: true, json: () => Promise.resolve({})};
+    }
+
     return {
       ok: false,
       status: 404,
@@ -89,6 +100,35 @@ describe('App', () => {
     await user.click(screen.getByRole('button', {name: /generate team/i}));
 
     await waitFor(() => expect(screen.getByText('Great Tusk')).toBeInTheDocument());
+    expect(screen.getByText('EVs: 252 Atk / 4 SpD / 252 Spe')).toBeInTheDocument();
+  });
+
+  it('generates with the unrated cutoff option', async () => {
+    stubFetch();
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const formatSelect = await screen.findByLabelText('Format');
+    await user.selectOptions(formatSelect, 'gen91v1');
+    await user.selectOptions(screen.getByLabelText('Rating cutoff'), '0');
+    await user.click(screen.getByRole('button', {name: /generate team/i}));
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/stats/2026-03/gen91v1/0'));
+    expect(await screen.findByText('Great Tusk')).toBeInTheDocument();
+  });
+
+  it('toggles dark mode from the control rail', async () => {
+    stubFetch();
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const shell = screen.getByRole('main');
+    await user.click(await screen.findByRole('button', {name: /dark mode/i}));
+
+    expect(shell).toHaveClass('app-shell--dark');
+    expect(screen.getByRole('button', {name: /light mode/i})).toBeInTheDocument();
   });
 
   it('marks a card as locked from the team board controls', async () => {

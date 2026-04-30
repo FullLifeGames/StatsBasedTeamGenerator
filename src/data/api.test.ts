@@ -1,5 +1,5 @@
 import {afterEach, describe, expect, it, vi} from 'vitest';
-import {fetchMonthFormats, fetchStatsDataset, fetchStatsIndex} from './api';
+import {fetchAnalysisSetTemplates, fetchMonthFormats, fetchStatsDataset, fetchStatsIndex} from './api';
 import type {StatsIndex} from '../domain/types';
 
 function mockFetch(response: Partial<Response> & {json: () => Promise<unknown>}): void {
@@ -39,5 +39,17 @@ describe('stats API client', () => {
 
     await expect(fetchMonthFormats('2026-02')).resolves.toBe(formats);
     expect(fetch).toHaveBeenCalledWith('/api/stats/index/2026-02');
+  });
+
+  it('fetchAnalysisSetTemplates(format, pokemon) posts a batched set request', async () => {
+    const templates = {baxcalibur: [{item: 'Loaded Dice', moves: ['Scale Shot', 'Icicle Spear']}]};
+    mockFetch({ok: true, json: () => Promise.resolve(templates)});
+
+    await expect(fetchAnalysisSetTemplates('gen9ou', ['Baxcalibur'])).resolves.toBe(templates);
+    expect(fetch).toHaveBeenCalledWith('/api/sets/gen9ou', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({pokemon: ['Baxcalibur']})
+    });
   });
 });

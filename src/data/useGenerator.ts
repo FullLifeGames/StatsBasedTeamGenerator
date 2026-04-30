@@ -2,7 +2,7 @@ import {useCallback, useEffect, useMemo, useState} from 'react';
 import {generateTeam} from '../domain/generator';
 import {toId} from '../domain/id';
 import type {FormatListing, GenerateOptions, GeneratedTeam, StatsDataset, StatsIndex, TeamMember} from '../domain/types';
-import {fetchMonthFormats, fetchStatsDataset, fetchStatsIndex} from './api';
+import {fetchAnalysisSetTemplates, fetchMonthFormats, fetchStatsDataset, fetchStatsIndex, fetchTeamValidation} from './api';
 
 type Archetype = GenerateOptions['archetype'];
 
@@ -80,6 +80,54 @@ function withLockedFlags(team: GeneratedTeam, lockedIds: Set<string>): Generated
   };
 }
 
+async function withAnalysisSets(dataset: StatsDataset, format: string, seeds: string[], lockedMembers: TeamMember[]): Promise<StatsDataset> {
+  const names = new Set([
+    ...dataset.pokemon.slice(0, 48).map(stats => stats.name),
+    ...seeds,
+    ...lockedMembers.map(member => member.stats.name)
+  ].filter(Boolean));
+
+  if (!names.size) return dataset;
+
+  try {
+    const templates = await fetchAnalysisSetTemplates(format, [...names]);
+    return {
+      ...dataset,
+      pokemon: dataset.pokemon.map(stats => ({
+        ...stats,
+        analysisSets: templates[toId(stats.name)] ?? templates[toId(stats.id)] ?? stats.analysisSets
+      })),
+      pokemonById: Object.fromEntries(dataset.pokemon.map(stats => {
+        const next = {
+          ...stats,
+          analysisSets: templates[toId(stats.name)] ?? templates[toId(stats.id)] ?? stats.analysisSets
+        };
+        return [stats.id, next];
+      }))
+    };
+  } catch {
+    return dataset;
+  }
+}
+
+async function withShowdownValidation(team: GeneratedTeam, format: string): Promise<GeneratedTeam> {
+  try {
+    return {
+      ...team,
+      validation: await fetchTeamValidation(format, team.importable)
+    };
+  } catch {
+    return {
+      ...team,
+      validation: {
+        status: 'unavailable',
+        formatName: format,
+        problems: ['Showdown validation is temporarily unavailable.']
+      }
+    };
+  }
+}
+
 export function useGenerator() {
   const [index, setIndex] = useState<StatsIndex | null>(null);
   const [dataset, setDataset] = useState<StatsDataset | null>(null);
@@ -90,6 +138,8 @@ export function useGenerator() {
   const [archetype, setArchetype] = useState<Archetype>('balanced');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const hasCompleteSelection = Boolean(selection.month && selection.format && Number.isFinite(selection.cutoff));
 
   useEffect(() => {
     let cancelled = false;
@@ -198,7 +248,7 @@ export function useGenerator() {
   }, []);
 
   const generate = useCallback(async () => {
-    if (!selection.month || !selection.format || !selection.cutoff) return null;
+    if (!hasCompleteSelection) return null;
 
     setLoading(true);
     setError(null);
@@ -208,15 +258,18 @@ export function useGenerator() {
       const validLockedIds = new Set(
         [...lockedIds].filter(id => Boolean(loadedDataset.pokemonById[id]))
       );
-      const generatedTeam = generateTeam(loadedDataset, selection.format, {
+      const lockedMembers = lockedMembersForDataset(team, validLockedIds, loadedDataset);
+      const enrichedDataset = await withAnalysisSets(loadedDataset, selection.format, seeds, lockedMembers);
+      const generatedTeam = generateTeam(enrichedDataset, selection.format, {
         seeds,
-        lockedMembers: lockedMembersForDataset(team, validLockedIds, loadedDataset),
+        lockedMembers,
         archetype,
-        novelty: 0
+        novelty: 0.3,
+        randomSeed: Math.floor(Math.random() * 1_000_000)
       });
-      const teamWithLockedFlags = withLockedFlags(generatedTeam, validLockedIds);
+      const teamWithLockedFlags = await withShowdownValidation(withLockedFlags(generatedTeam, validLockedIds), selection.format);
 
-      setDataset(loadedDataset);
+      setDataset(enrichedDataset);
       setLockedIds(validLockedIds);
       setTeam(teamWithLockedFlags);
       return teamWithLockedFlags;
@@ -226,10 +279,10 @@ export function useGenerator() {
     } finally {
       setLoading(false);
     }
-  }, [archetype, lockedIds, seeds, selection.cutoff, selection.format, selection.month, team]);
+  }, [archetype, hasCompleteSelection, lockedIds, seeds, selection.cutoff, selection.format, selection.month, team]);
 
   const replaceMember = useCallback(async (pokemonId: string | undefined) => {
-    if (!pokemonId || !team || !selection.month || !selection.format || !selection.cutoff) return null;
+    if (!pokemonId || !team || !hasCompleteSelection) return null;
     const normalizedId = toId(pokemonId);
 
     setLoading(true);
@@ -244,16 +297,18 @@ export function useGenerator() {
         .filter(member => toId(member.stats.id) !== normalizedId)
         .filter(member => Boolean(loadedDataset.pokemonById[toId(member.stats.id)]))
         .map(member => ({...member, locked: true}));
-      const generatedTeam = generateTeam(loadedDataset, selection.format, {
+      const enrichedDataset = await withAnalysisSets(loadedDataset, selection.format, seeds, preservedMembers);
+      const generatedTeam = generateTeam(enrichedDataset, selection.format, {
         seeds,
         lockedMembers: preservedMembers,
         bannedMembers: [normalizedId],
         archetype,
-        novelty: 0
+        novelty: 0.3,
+        randomSeed: Math.floor(Math.random() * 1_000_000)
       });
-      const teamWithLockedFlags = withLockedFlags(generatedTeam, validLockedIds);
+      const teamWithLockedFlags = await withShowdownValidation(withLockedFlags(generatedTeam, validLockedIds), selection.format);
 
-      setDataset(loadedDataset);
+      setDataset(enrichedDataset);
       setLockedIds(validLockedIds);
       setTeam(teamWithLockedFlags);
       return teamWithLockedFlags;
@@ -263,7 +318,7 @@ export function useGenerator() {
     } finally {
       setLoading(false);
     }
-  }, [archetype, lockedIds, seeds, selection.cutoff, selection.format, selection.month, team]);
+  }, [archetype, hasCompleteSelection, lockedIds, seeds, selection.cutoff, selection.format, selection.month, team]);
 
   const availableFormats = useMemo(() => formatsForMonth(index, selection.month), [index, selection.month]);
   const availableCutoffs = useMemo(

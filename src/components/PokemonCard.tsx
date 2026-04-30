@@ -50,6 +50,7 @@ export function PokemonCard({member, onToggleLock, onReplace}: PokemonCardProps)
           <h3>{member.stats.name}</h3>
           <p>{member.set.item || 'No item'}</p>
           <p>{member.set.ability || 'No ability'}</p>
+          {member.set.evs ? <p className="pokemon-card__evs">EVs: {member.set.evs}</p> : null}
         </div>
         <div className="pokemon-card__actions" aria-label={`${member.stats.name} controls`}>
           <button

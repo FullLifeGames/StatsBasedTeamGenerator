@@ -91,6 +91,29 @@ describe('scoreTeam', () => {
     expect(weather.archetype).toBeGreaterThan(0);
     expect(weather.total).toBeGreaterThan(balanced.total);
   });
+
+  it('warns and penalizes terrain seeds without matching terrain support', () => {
+    const hawlucha = makePokemon({
+      id: 'hawlucha',
+      name: 'Hawlucha',
+      items: {electricseed: 100},
+      moves: {closecombat: 100, acrobatics: 95, swordsdance: 80, roost: 60}
+    });
+    const pincurchin = makePokemon({
+      id: 'pincurchin',
+      name: 'Pincurchin',
+      abilities: {electricsurge: 100},
+      moves: {thunderbolt: 100, spikes: 80, recover: 70, surf: 60}
+    });
+    const dataset = makeDataset([hawlucha, pincurchin]);
+    const profile = inferFormatProfile('gen9ou');
+    const unsupported = scoreTeam([member(hawlucha)], dataset, profile);
+    const supported = scoreTeam([member(hawlucha), member(pincurchin)], dataset, profile);
+
+    expect(unsupported.warnings).toContain('Hawlucha has Electric Seed without Electric Terrain support');
+    expect(supported.warnings).not.toContain('Hawlucha has Electric Seed without Electric Terrain support');
+    expect(unsupported.setToTeamFit).toBeLessThan(supported.setToTeamFit);
+  });
 });
 
 describe('threatCoverage', () => {
@@ -101,6 +124,18 @@ describe('threatCoverage', () => {
     const coverage = threatCoverage([member(greatTusk)], dataset);
 
     expect(coverage.find(item => item.threatId === 'kingambit')?.covered).toBe(true);
+  });
+
+  it('tracks more than twelve threats by default', () => {
+    const answer = makePokemon({id: 'greattusk', name: 'Great Tusk', usage: 30});
+    const threats = Array.from({length: 18}, (_, index) => makePokemon({
+      id: `threat-${index}`,
+      name: `Threat ${index}`,
+      usage: 29 - index
+    }));
+    const dataset = makeDataset([answer, ...threats]);
+
+    expect(threatCoverage([member(answer)], dataset)).toHaveLength(18);
   });
 });
 
