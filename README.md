@@ -92,6 +92,137 @@ Typical host configuration:
 For single-process hosting, no extra static-site service is needed. The Express
 server serves both the built `dist/` assets and all `/api` routes.
 
+### VPS Deployment: Rocky Linux
+
+These notes assume Rocky Linux 9 or similar, a domain pointed at the VPS, and
+Nginx as the public reverse proxy. The Node server can stay private on
+`127.0.0.1:8787`.
+
+Install system packages:
+
+```bash
+sudo dnf update -y
+sudo dnf install -y git nginx policycoreutils-python-utils
+```
+
+Install Node.js 22 or newer using your preferred source. For example, with `nvm`
+or another Node version manager, install Node 22 for the deploy user and confirm:
+
+```bash
+node --version
+npm --version
+```
+
+Create a dedicated app user and deploy directory:
+
+```bash
+sudo useradd --system --create-home --shell /bin/bash teamgen
+sudo mkdir -p /opt/stats-based-team-generator
+sudo chown teamgen:teamgen /opt/stats-based-team-generator
+```
+
+Clone, install, and build:
+
+```bash
+sudo -iu teamgen
+git clone https://github.com/FullLifeGames/StatsBasedTeamGenerator.git /opt/stats-based-team-generator
+cd /opt/stats-based-team-generator
+npm ci
+npm run build
+exit
+```
+
+Create `/etc/systemd/system/team-generator.service`:
+
+```ini
+[Unit]
+Description=Stats Based Team Generator
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=teamgen
+Group=teamgen
+WorkingDirectory=/opt/stats-based-team-generator
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=8787
+ExecStart=/usr/bin/npm start
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+If `npm` is not at `/usr/bin/npm`, replace `ExecStart` with the absolute path
+from `command -v npm` for the `teamgen` user.
+
+Enable the service:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now team-generator
+sudo systemctl status team-generator
+```
+
+Configure Nginx, replacing `teamgen.example.com` with your domain:
+
+```nginx
+server {
+    listen 80;
+    server_name teamgen.example.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:8787;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Save that as `/etc/nginx/conf.d/team-generator.conf`, then test and reload:
+
+```bash
+sudo nginx -t
+sudo systemctl enable --now nginx
+sudo systemctl reload nginx
+```
+
+Open HTTP/HTTPS in the firewall as needed:
+
+```bash
+sudo firewall-cmd --permanent --add-service=http
+sudo firewall-cmd --permanent --add-service=https
+sudo firewall-cmd --reload
+```
+
+On SELinux-enabled hosts, allow Nginx to proxy to the local Node process:
+
+```bash
+sudo setsebool -P httpd_can_network_connect 1
+```
+
+For HTTPS, install and run Certbot with the Nginx plugin, or terminate TLS at
+your VPS provider/load balancer. After TLS is configured, keep the Node service
+bound to `127.0.0.1`; only Nginx should be public.
+
+To deploy updates:
+
+```bash
+sudo -iu teamgen
+cd /opt/stats-based-team-generator
+git pull --ff-only
+npm ci
+npm run build
+exit
+sudo systemctl restart team-generator
+```
+
 ## Data Sources
 
 - `https://www.smogon.com/stats` for usage, chaos, teammate, and checks/counters
