@@ -114,6 +114,40 @@ describe('scoreTeam', () => {
     expect(supported.warnings).not.toContain('Hawlucha has Electric Seed without Electric Terrain support');
     expect(unsupported.setToTeamFit).toBeLessThan(supported.setToTeamFit);
   });
+
+  it('warns and penalizes teams with multiple Mega Stones', () => {
+    const charizard = makePokemon({
+      id: 'charizard',
+      name: 'Charizard',
+      items: {charizarditex: 100},
+      moves: {flamethrower: 100, airslash: 90, roost: 80, dragonclaw: 70}
+    });
+    const scizor = makePokemon({
+      id: 'scizor',
+      name: 'Scizor',
+      items: {scizorite: 100},
+      moves: {bulletpunch: 100, uturn: 90, swordsdance: 80, roost: 70}
+    });
+    const dataset = makeDataset([charizard, scizor]);
+    const profile = inferFormatProfile('gen7ou');
+    const charizardMember = member(charizard, 'gen7ou');
+    const scizorMegaMember = member(scizor, 'gen7ou');
+    const scizorNonMegaMember = {
+      ...scizorMegaMember,
+      set: {
+        ...scizorMegaMember.set,
+        item: 'Leftovers',
+        itemId: 'leftovers'
+      }
+    };
+
+    const multipleMega = scoreTeam([charizardMember, scizorMegaMember], dataset, profile);
+    const singleMega = scoreTeam([charizardMember, scizorNonMegaMember], dataset, profile);
+
+    expect(multipleMega.warnings).toContain('Multiple Mega Stones: Charizard (Charizardite X), Scizor (Scizorite)');
+    expect(singleMega.warnings).not.toContain('Multiple Mega Stones: Charizard (Charizardite X), Scizor (Scizorite)');
+    expect(multipleMega.setToTeamFit).toBeLessThan(singleMega.setToTeamFit);
+  });
 });
 
 describe('threatCoverage', () => {

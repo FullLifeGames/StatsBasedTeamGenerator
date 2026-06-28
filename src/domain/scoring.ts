@@ -1,5 +1,6 @@
 import {scoreSetForTeamContext} from './sets';
 import {unsupportedTerrainSeedWarnings} from './fieldSupport';
+import {megaStoneMembers, multipleMegaStoneWarnings} from './itemConstraints';
 import type {
   FormatProfile,
   GenerateOptions,
@@ -174,6 +175,7 @@ function setToTeamFitScore(members: TeamMember[], profile: FormatProfile): numbe
   }
 
   score -= unsupportedTerrainSeedWarnings(members).length * 1.5;
+  score -= Math.max(0, megaStoneMembers(members, profile).length - 1) * 2;
 
   return clamp(score, -5, 5);
 }
@@ -235,6 +237,7 @@ function warningList(members: TeamMember[], profile: FormatProfile): string[] {
   }
 
   warnings.push(...unsupportedTerrainSeedWarnings(members));
+  warnings.push(...multipleMegaStoneWarnings(members, profile));
 
   return warnings;
 }
