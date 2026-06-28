@@ -1,13 +1,30 @@
 {
-  "name": "team-generator-based-on-stats",
+  "name": "stats-based-team-generator",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
+  "description": "A multi-format Pokemon team generator powered by Smogon usage stats, checks, counters, and team-aware set scoring.",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FullLifeGames/StatsBasedTeamGenerator.git"
+  },
+  "bugs": {
+    "url": "https://github.com/FullLifeGames/StatsBasedTeamGenerator/issues"
+  },
+  "homepage": "https://github.com/FullLifeGames/StatsBasedTeamGenerator#readme",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "concurrently -k \"npm:dev:api\" \"npm:dev:client\"",
     "dev:client": "vite --host 127.0.0.1",
     "dev:api": "tsx watch server/index.ts",
-    "build": "tsc --noEmit -p tsconfig.node.json && vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json",
+    "build": "npm run typecheck && vite build",
+    "ci": "npm run lint && npm test && npm run build",
+    "audit": "npm audit --audit-level=moderate",
+    "start": "tsx server/index.ts",
     "preview": "concurrently -k \"npm:preview:api\" \"npm:preview:client\"",
     "preview:client": "vite preview --host 127.0.0.1",
     "preview:api": "tsx server/index.ts",
@@ -41,10 +58,10 @@
     "eslint": "^9.16.0",
     "globals": "^17.5.0",
     "jsdom": "^29.0.2",
-    "tsx": "^4.19.2",
+    "tsx": "^4.22.4",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.59.0",
     "vite": "^6.0.3",
-    "vitest": "^2.1.8"
+    "vitest": "^4.1.9"
   }
 }

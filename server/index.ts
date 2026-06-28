@@ -6,6 +6,7 @@ import {createSmogonRouter} from './smogon/routes';
 
 const app = express();
 const port = Number(process.env.PORT ?? 8787);
+const host = process.env.HOST ?? '127.0.0.1';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.resolve(__dirname, '..', 'dist');
 
@@ -16,6 +17,6 @@ app.get('*', (_request, response) => {
   response.sendFile(path.join(distDir, 'index.html'));
 });
 
-app.listen(port, '127.0.0.1', () => {
-  console.log(`Smogon team generator API listening on http://127.0.0.1:${port}`);
+app.listen(port, host, () => {
+  console.log(`Smogon team generator API listening on http://${host}:${port}`);
 });

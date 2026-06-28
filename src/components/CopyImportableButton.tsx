@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {Check, Copy} from 'lucide-react';
 
 interface CopyImportableButtonProps {
@@ -7,12 +7,31 @@ interface CopyImportableButtonProps {
 
 export function CopyImportableButton({importable}: CopyImportableButtonProps) {
   const [copied, setCopied] = useState(false);
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setCopied(false);
+    if (resetTimer.current) {
+      clearTimeout(resetTimer.current);
+      resetTimer.current = null;
+    }
+  }, [importable]);
+
+  useEffect(() => () => {
+    if (resetTimer.current) {
+      clearTimeout(resetTimer.current);
+    }
+  }, []);
 
   const copyImportable = async (): Promise<void> => {
     await window.navigator.clipboard?.writeText(importable);
     setCopied(true);
-    setTimeout(() => {
+    if (resetTimer.current) {
+      clearTimeout(resetTimer.current);
+    }
+    resetTimer.current = setTimeout(() => {
       setCopied(false);
+      resetTimer.current = null;
     }, 2000);
   };
 

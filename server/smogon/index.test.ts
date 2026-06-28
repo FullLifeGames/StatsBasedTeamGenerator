@@ -1,7 +1,4 @@
 import {describe, expect, it, vi} from 'vitest';
-import crypto from 'node:crypto';
-import {rm, stat} from 'node:fs/promises';
-import path from 'node:path';
 import {discoverMonthFormats, discoverStatsIndex, parseChaosListing, parseMonthListing} from './index';
 
 const rootHtml = `
@@ -17,15 +14,6 @@ const chaosHtml = `
   <a href="gen9doublesou-1825.json">gen9doublesou-1825.json</a>
 `;
 
-function cachePathFor(key: string): string {
-  return path.resolve(
-    process.cwd(),
-    '.cache',
-    'smogon',
-    `${crypto.createHash('sha1').update(key).digest('hex')}.txt`
-  );
-}
-
 describe('Smogon index discovery', () => {
   it('parses and sorts months newest first', () => {
     expect(parseMonthListing(rootHtml)).toEqual(['2026-03', '2026-02']);
@@ -39,9 +27,6 @@ describe('Smogon index discovery', () => {
   });
 
   it('bypasses the runtime cache for injected fetchers', async () => {
-    const runtimeRootCachePath = cachePathFor('stats-root');
-    await rm(runtimeRootCachePath, {force: true});
-
     const firstFetcher = vi.fn(async (url: string) => {
       if (url === 'https://www.smogon.com/stats/') return rootHtml;
       if (url === 'https://www.smogon.com/stats/2026-03/chaos/') return chaosHtml;
@@ -60,7 +45,8 @@ describe('Smogon index discovery', () => {
       latestMonth: '2027-01',
       formats: [{id: 'gen9ubers', cutoffs: [0]}]
     });
-    await expect(stat(runtimeRootCachePath)).rejects.toMatchObject({code: 'ENOENT'});
+    expect(firstFetcher).toHaveBeenCalledTimes(2);
+    expect(secondFetcher).toHaveBeenCalledTimes(2);
   });
 
   it('fetches the latest index from Smogon', async () => {
