@@ -38,4 +38,16 @@ describe('TeamBoard', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(team.importable));
     expect(await screen.findByRole('button', {name: /copied/i})).toBeInTheDocument();
   });
+
+  it('shows unavailable threat coverage when the stats file has no checks and counters data', () => {
+    const team = generateTeam(dataset, 'gen91v1', {
+      seeds: ['Great Tusk'],
+      archetype: 'balanced',
+      novelty: 0
+    });
+
+    render(<TeamBoard team={team} />);
+
+    expect(screen.getByText('N/A')).toBeInTheDocument();
+  });
 });

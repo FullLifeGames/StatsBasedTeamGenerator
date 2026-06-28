@@ -151,6 +151,18 @@ describe('scoreTeam', () => {
 });
 
 describe('threatCoverage', () => {
+  it('returns no tracked threats when the stats file has no checks and counters data', () => {
+    const answer = makePokemon({id: 'greattusk', name: 'Great Tusk', usage: 30});
+    const threats = Array.from({length: 18}, (_, index) => makePokemon({
+      id: `threat-${index}`,
+      name: `Threat ${index}`,
+      usage: 29 - index
+    }));
+    const dataset = makeDataset([answer, ...threats]);
+
+    expect(threatCoverage([member(answer)], dataset)).toEqual([]);
+  });
+
   it('reports covered threats from checks and counters', () => {
     const greatTusk = makePokemon({id: 'greattusk', name: 'Great Tusk', usage: 30, checks: [{target: 'kingambit', samples: 50, probability: 0.7, deviation: 0.05}]});
     const kingambit = makePokemon({id: 'kingambit', name: 'Kingambit', usage: 28});
@@ -161,7 +173,7 @@ describe('threatCoverage', () => {
   });
 
   it('tracks more than twelve threats by default', () => {
-    const answer = makePokemon({id: 'greattusk', name: 'Great Tusk', usage: 30});
+    const answer = makePokemon({id: 'greattusk', name: 'Great Tusk', usage: 30, checks: [{target: 'threat-0', samples: 50, probability: 0.7, deviation: 0.05}]});
     const threats = Array.from({length: 18}, (_, index) => makePokemon({
       id: `threat-${index}`,
       name: `Threat ${index}`,

@@ -120,6 +120,19 @@ describe('InsightPanel', () => {
     expect(screen.getByText(/Covered by Great Tusk/)).toBeInTheDocument();
   });
 
+  it('shows threat coverage as unavailable when the stats file has no checks and counters data', () => {
+    const team = generateTeam(dataset, 'gen91v1', {
+      seeds: ['Great Tusk'],
+      archetype: 'balanced',
+      novelty: 0
+    });
+
+    render(<InsightPanel team={team} />);
+
+    expect(screen.getByText('Checks and counters data is not available for this stats file.')).toBeInTheDocument();
+    expect(screen.queryByText(/tracked threats covered/)).not.toBeInTheDocument();
+  });
+
   it('copies the Showdown importable text', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(window.navigator, 'clipboard', {

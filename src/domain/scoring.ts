@@ -89,7 +89,13 @@ function confidenceForThreat(edge: {samples: number; probability: number; deviat
   return edge.probability * Math.min(1, edge.samples / 40) * (1 - Math.min(0.5, edge.deviation));
 }
 
+function hasCounterData(dataset: StatsDataset): boolean {
+  return dataset.pokemon.some(stats => stats.checks.length > 0);
+}
+
 export function threatCoverage(members: TeamMember[], dataset: StatsDataset, limit = 24): ThreatCoverage[] {
+  if (!hasCounterData(dataset)) return [];
+
   const teamIds = new Set(members.map(member => member.stats.id));
   const threats = dataset.pokemon
     .filter(stats => !teamIds.has(stats.id))

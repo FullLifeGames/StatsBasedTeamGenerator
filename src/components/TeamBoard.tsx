@@ -21,6 +21,7 @@ export function TeamBoard({team, onToggleLock, onReplace}: TeamBoardProps) {
   }
 
   const coveredThreats = team.threats.filter(threat => threat.covered).length;
+  const threatSummary = team.threats.length ? `${coveredThreats}/${team.threats.length}` : 'N/A';
 
   return (
     <section className="team-board" aria-label="Generated team">
@@ -39,7 +40,7 @@ export function TeamBoard({team, onToggleLock, onReplace}: TeamBoardProps) {
             </div>
             <div>
               <dt>Threats</dt>
-              <dd>{coveredThreats}/{team.threats.length}</dd>
+              <dd>{threatSummary}</dd>
             </div>
           </dl>
           <CopyImportableButton importable={team.importable} />

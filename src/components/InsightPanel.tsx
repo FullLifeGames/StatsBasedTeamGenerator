@@ -38,6 +38,7 @@ export function InsightPanel({team}: InsightPanelProps) {
   }
 
   const coveredThreats = team.threats.filter(threat => threat.covered).length;
+  const hasThreatCoverage = team.threats.length > 0;
   const topSynergy = team.synergy.slice(0, 4);
 
   return (
@@ -61,26 +62,34 @@ export function InsightPanel({team}: InsightPanelProps) {
 
       <section className="insight-section" aria-labelledby="threat-heading">
         <h3 id="threat-heading">Threat coverage</h3>
-        <p className="insight-kicker">
-          {coveredThreats}/{team.threats.length} tracked threats covered
-        </p>
-        <ul className="threat-list">
-          {team.threats.map(threat => (
-            <li key={threat.threatId}>
-              <div className="threat-list__main">
-                <span>{threat.threatName}</span>
-                <strong className={threat.covered ? 'status-pill status-pill--covered' : 'status-pill status-pill--open'}>
-                  {threat.covered ? 'Covered' : 'Open'}
-                </strong>
-              </div>
-              <p className="threat-answer">
-                {threat.answers.length
-                  ? `Covered by ${threat.answers.slice(0, 3).map(answer => `${answer.pokemonName} ${formatScore(answer.confidence)}`).join(', ')}`
-                  : 'No reliable answer found'}
-              </p>
-            </li>
-          ))}
-        </ul>
+        {hasThreatCoverage ? (
+          <>
+            <p className="insight-kicker">
+              {coveredThreats}/{team.threats.length} tracked threats covered
+            </p>
+            <ul className="threat-list">
+              {team.threats.map(threat => (
+                <li key={threat.threatId}>
+                  <div className="threat-list__main">
+                    <span>{threat.threatName}</span>
+                    <strong className={threat.covered ? 'status-pill status-pill--covered' : 'status-pill status-pill--open'}>
+                      {threat.covered ? 'Covered' : 'Open'}
+                    </strong>
+                  </div>
+                  <p className="threat-answer">
+                    {threat.answers.length
+                      ? `Covered by ${threat.answers.slice(0, 3).map(answer => `${answer.pokemonName} ${formatScore(answer.confidence)}`).join(', ')}`
+                      : 'No reliable answer found'}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <p className="insight-kicker">
+            Checks and counters data is not available for this stats file.
+          </p>
+        )}
       </section>
 
       {topSynergy.length ? (
