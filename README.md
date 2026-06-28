@@ -9,6 +9,10 @@ and doubles formats.
 
 ![Stats Based Team Generator overview](docs/ad.png)
 
+## Live Deployment
+
+The current deployment is available at https://teamgen.fulllifegames.com/.
+
 ## Features
 
 - Multi-format Smogon stats browser with month, format, and cutoff selection.
