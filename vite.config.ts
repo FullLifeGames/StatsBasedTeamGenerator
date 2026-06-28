@@ -12,6 +12,7 @@ const config: UserConfig & {test: InlineConfig} = {
   },
   test: {
     environment: 'jsdom',
+    exclude: ['**/.cache/**', '**/.worktrees/**', '**/dist/**', '**/node_modules/**'],
     globals: true,
     passWithNoTests: true,
     setupFiles: './src/test/setup.ts'

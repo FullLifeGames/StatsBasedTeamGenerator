@@ -11,7 +11,14 @@ const nodeOnlyGlobals = Object.keys(globals.node)
 
 export default tseslint.config(
   {
-    ignores: ['dist/', '.cache/', 'coverage/', 'node_modules/']
+    ignores: [
+      '**/.cache/**',
+      '**/.codex-logs/**',
+      '**/.worktrees/**',
+      '**/coverage/**',
+      '**/dist/**',
+      '**/node_modules/**'
+    ]
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
