@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {makeDataset, makePokemon} from './test/fixtures';
 import type {StatsDataset, StatsIndex} from './domain/types';
+import {clearApiCaches} from './data/api';
 import {App} from './App';
 
 const index: StatsIndex = {
@@ -86,6 +87,7 @@ function stubFetch(): void {
 
 describe('App', () => {
   afterEach(() => {
+    clearApiCaches();
     vi.unstubAllGlobals();
   });
 

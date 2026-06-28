@@ -2,7 +2,14 @@ import {useCallback, useEffect, useMemo, useState} from 'react';
 import {generateTeam} from '../domain/generator';
 import {toId} from '../domain/id';
 import type {FormatListing, GenerateOptions, GeneratedTeam, StatsDataset, StatsIndex, TeamMember} from '../domain/types';
-import {fetchAnalysisSetTemplates, fetchMonthFormats, fetchStatsDataset, fetchStatsIndex, fetchTeamValidation} from './api';
+import {
+  fetchAnalysisSetTemplates,
+  fetchMonthFormats,
+  fetchStatsDataset,
+  fetchStatsIndex,
+  fetchTeamValidation,
+  prefetchStatsDataset
+} from './api';
 
 type Archetype = GenerateOptions['archetype'];
 
@@ -170,6 +177,11 @@ export function useGenerator() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!hasCompleteSelection) return;
+    prefetchStatsDataset(selection.month, selection.format, selection.cutoff);
+  }, [hasCompleteSelection, selection.cutoff, selection.format, selection.month]);
 
   const clearGeneratedState = useCallback(() => {
     setDataset(null);

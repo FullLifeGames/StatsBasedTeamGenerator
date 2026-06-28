@@ -2,6 +2,7 @@ import {act, renderHook, waitFor} from '@testing-library/react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {makeDataset, makePokemon} from '../test/fixtures';
 import type {StatsDataset, StatsIndex} from '../domain/types';
+import {clearApiCaches} from './api';
 import {useGenerator} from './useGenerator';
 
 const index: StatsIndex = {
@@ -72,6 +73,7 @@ function stubFetch(datasets: Record<string, StatsDataset>): void {
 
 describe('useGenerator', () => {
   afterEach(() => {
+    clearApiCaches();
     vi.unstubAllGlobals();
   });
 

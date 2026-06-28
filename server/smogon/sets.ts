@@ -10,6 +10,7 @@ interface JsonResponse {
 }
 
 const gens = new Generations(Dex);
+const setFetchConcurrency = 8;
 
 function cachedFetch(cache: typeof readThroughCache): (url: string) => Promise<JsonResponse> {
   return async (url: string) => ({
@@ -58,6 +59,26 @@ function normalizeSet(raw: Record<string, unknown>): AnalysisSetTemplate | null 
   };
 }
 
+async function mapWithConcurrency<T, U>(
+  values: T[],
+  limit: number,
+  mapper: (value: T) => Promise<U>
+): Promise<U[]> {
+  const results: U[] = [];
+  let cursor = 0;
+
+  async function worker(): Promise<void> {
+    while (cursor < values.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await mapper(values[index]);
+    }
+  }
+
+  await Promise.all(Array.from({length: Math.min(limit, values.length)}, () => worker()));
+  return results;
+}
+
 export async function fetchAnalysisSetTemplates(
   format: string,
   pokemon: string[],
@@ -67,14 +88,15 @@ export async function fetchAnalysisSetTemplates(
   const generation = gens.get(genNumber);
   const smogon = new Smogon(cachedFetch(cache), true);
   const result: Record<string, AnalysisSetTemplate[]> = {};
+  const names = [...new Set(pokemon.map(name => name.trim()).filter(Boolean))];
 
-  for (const name of pokemon) {
+  await mapWithConcurrency(names, setFetchConcurrency, async name => {
     const sets = await smogon.sets(generation, name, format as ID);
     const normalized = sets
       .map(set => normalizeSet(set as Record<string, unknown>))
       .filter((set): set is AnalysisSetTemplate => Boolean(set));
     result[toId(name)] = normalized;
-  }
+  });
 
   return result;
 }
