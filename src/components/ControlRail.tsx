@@ -58,7 +58,7 @@ export function ControlRail({
     <aside className="control-rail" aria-label="Generator controls">
       <div className="control-rail__header">
         <p className="eyebrow">Smogon stats</p>
-        <h1>Team generator</h1>
+        <h1>Team Generator</h1>
       </div>
       <div className="control-rail__meta" aria-label="Loaded stats options">
         <span>{availableFormats.length} formats</span>
