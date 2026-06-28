@@ -95,14 +95,14 @@ server serves both the built `dist/` assets and all `/api` routes.
 ### VPS Deployment: Rocky Linux
 
 These notes assume Rocky Linux 9 or similar, a domain pointed at the VPS, and
-Nginx as the public reverse proxy. The Node server can stay private on
+Apache httpd as the public reverse proxy. The Node server can stay private on
 `127.0.0.1:8787`.
 
 Install system packages:
 
 ```bash
 sudo dnf update -y
-sudo dnf install -y git nginx policycoreutils-python-utils
+sudo dnf install -y git httpd mod_ssl policycoreutils-python-utils
 ```
 
 Install Node.js 22 or newer using your preferred source. For example, with `nvm`
@@ -167,30 +167,28 @@ sudo systemctl enable --now team-generator
 sudo systemctl status team-generator
 ```
 
-Configure Nginx, replacing `teamgen.example.com` with your domain:
+Configure Apache httpd, replacing `teamgen.example.com` with your domain:
 
-```nginx
-server {
-    listen 80;
-    server_name teamgen.example.com;
+```apache
+<VirtualHost *:80>
+    ServerName teamgen.example.com
 
-    location / {
-        proxy_pass http://127.0.0.1:8787;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
+    ProxyPreserveHost On
+    ProxyPass / http://127.0.0.1:8787/
+    ProxyPassReverse / http://127.0.0.1:8787/
+
+    RequestHeader set X-Forwarded-Proto "http"
+    ErrorLog /var/log/httpd/team-generator-error.log
+    CustomLog /var/log/httpd/team-generator-access.log combined
+</VirtualHost>
 ```
 
-Save that as `/etc/nginx/conf.d/team-generator.conf`, then test and reload:
+Save that as `/etc/httpd/conf.d/team-generator.conf`, then test and reload:
 
 ```bash
-sudo nginx -t
-sudo systemctl enable --now nginx
-sudo systemctl reload nginx
+sudo apachectl configtest
+sudo systemctl enable --now httpd
+sudo systemctl reload httpd
 ```
 
 Open HTTP/HTTPS in the firewall as needed:
@@ -201,15 +199,15 @@ sudo firewall-cmd --permanent --add-service=https
 sudo firewall-cmd --reload
 ```
 
-On SELinux-enabled hosts, allow Nginx to proxy to the local Node process:
+On SELinux-enabled hosts, allow Apache to proxy to the local Node process:
 
 ```bash
 sudo setsebool -P httpd_can_network_connect 1
 ```
 
-For HTTPS, install and run Certbot with the Nginx plugin, or terminate TLS at
+For HTTPS, install and run Certbot with the Apache plugin, or terminate TLS at
 your VPS provider/load balancer. After TLS is configured, keep the Node service
-bound to `127.0.0.1`; only Nginx should be public.
+bound to `127.0.0.1`; only Apache should be public.
 
 To deploy updates:
 
