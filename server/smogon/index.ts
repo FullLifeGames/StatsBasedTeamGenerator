@@ -2,6 +2,7 @@ import type {FormatListing, StatsIndex} from '../../src/domain/types';
 import {readThroughCache} from './cache';
 
 const STATS_ROOT = 'https://www.smogon.com/stats/';
+const CACHE_VERSION = 'v2';
 const MONTH_PATTERN = /href="(\d{4}-\d{2})\/"/g;
 const CHAOS_FILE_PATTERN = /href="([^"]+)-(\d+)\.json"/g;
 
@@ -69,14 +70,14 @@ export async function discoverMonthFormats(
 ): Promise<FormatListing[]> {
   const loadText = textLoader(fetcher);
   const chaosUrl = `${STATS_ROOT}${month}/chaos/`;
-  const chaos = await loadText(`chaos-index:${month}`, chaosUrl);
+  const chaos = await loadText(`${CACHE_VERSION}:chaos-index:${month}`, chaosUrl);
   return parseChaosListing(chaos, month);
 }
 
 export async function discoverStatsIndex(fetcher: TextFetcher = fetchText): Promise<StatsIndex> {
   const loadText = textLoader(fetcher);
 
-  const root = await loadText('stats-root', STATS_ROOT);
+  const root = await loadText(`${CACHE_VERSION}:stats-root`, STATS_ROOT);
   const months = parseMonthListing(root);
   if (!months.length) throw new Error('No Smogon stats months found');
   const latestMonth = months[0];
