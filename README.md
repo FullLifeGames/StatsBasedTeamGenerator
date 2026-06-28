@@ -7,6 +7,8 @@ The app builds Showdown-importable teams, validates them with `@pkmn/sim` when
 the selected format is available, and uses different role priorities for singles
 and doubles formats.
 
+![Stats Based Team Generator overview](docs/ad.png)
+
 ## Features
 
 - Multi-format Smogon stats browser with month, format, and cutoff selection.
