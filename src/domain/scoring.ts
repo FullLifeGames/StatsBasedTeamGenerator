@@ -1,4 +1,6 @@
+import {Dex} from '@pkmn/dex';
 import {scoreSetForTeamContext} from './sets';
+import {toId} from './id';
 import {unsupportedTerrainSeedWarnings} from './fieldSupport';
 import {megaStonePenalty, multipleMegaStoneWarnings} from './itemConstraints';
 import type {
@@ -172,6 +174,41 @@ function duplicateRoleScore(members: TeamMember[], profile: FormatProfile): numb
   return clamp(penalty, -5, 0);
 }
 
+function memberHasTrickRoom(member: TeamMember): boolean {
+  return member.set.moves.some(move => toId(move) === 'trickroom');
+}
+
+function memberBaseSpeed(member: TeamMember, profile: FormatProfile): number {
+  const species = Dex.forGen(profile.gen).species.get(member.stats.name);
+  return species.exists ? species.baseStats.spe : 100;
+}
+
+function trickRoomSlowComplement(member: TeamMember, profile: FormatProfile): number {
+  const speed = memberBaseSpeed(member, profile);
+  const attackPressure = Math.max(
+    member.set.roles.physicalBreaker,
+    member.set.roles.specialBreaker,
+    member.set.roles.spreadPressure,
+    member.set.roles.setup * 0.6
+  );
+
+  if (speed <= 45) return Math.max(0.8, attackPressure);
+  if (speed <= 60) return Math.max(0.5, attackPressure * 0.75);
+  if (speed <= 75) return attackPressure * 0.35;
+  return 0;
+}
+
+function trickRoomSupportPenalty(members: TeamMember[], profile: FormatProfile): number {
+  if (!members.some(memberHasTrickRoom)) return 0;
+
+  const complementScore = members
+    .filter(member => !memberHasTrickRoom(member))
+    .reduce((sum, member) => sum + trickRoomSlowComplement(member, profile), 0);
+  const requiredComplement = members.length >= 4 ? 1.5 : 0.75;
+
+  return Math.max(0, requiredComplement - complementScore) * 2.5;
+}
+
 function setToTeamFitScore(members: TeamMember[], profile: FormatProfile): number {
   let score = 0;
 
@@ -182,6 +219,7 @@ function setToTeamFitScore(members: TeamMember[], profile: FormatProfile): numbe
 
   score -= unsupportedTerrainSeedWarnings(members).length * 1.5;
   score -= megaStonePenalty(members, profile);
+  score -= trickRoomSupportPenalty(members, profile);
 
   return clamp(score, -12, 5);
 }
@@ -223,9 +261,15 @@ function archetypeScore(members: TeamMember[], profile: FormatProfile, archetype
     case 'weather':
       score = totals.weatherTerrainSetter * 1.8 + totals.weatherTerrainAbuser * 1.4;
       break;
-    case 'trick-room':
-      score = totals.speedControl * 1.3 + totals.positioning + totals.spreadPressure * (profile.battleStyle === 'doubles' ? 1 : 0.5);
+    case 'trick-room': {
+      const slowComplement = members.reduce((sum, member) => sum + trickRoomSlowComplement(member, profile), 0);
+      score = totals.speedControl * 1.3
+        + totals.positioning
+        + totals.spreadPressure * (profile.battleStyle === 'doubles' ? 1 : 0.5)
+        + slowComplement * 1.8
+        - trickRoomSupportPenalty(members, profile);
       break;
+    }
   }
 
   return clamp((score / teamSize) * 2, 0, 3);
@@ -244,6 +288,10 @@ function warningList(members: TeamMember[], profile: FormatProfile): string[] {
 
   warnings.push(...unsupportedTerrainSeedWarnings(members));
   warnings.push(...multipleMegaStoneWarnings(members, profile));
+
+  if (trickRoomSupportPenalty(members, profile) > 0) {
+    warnings.push('Trick Room needs slow attackers or bulky partners to capitalize on the speed reversal');
+  }
 
   return warnings;
 }
