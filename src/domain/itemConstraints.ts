@@ -28,6 +28,14 @@ export function megaStoneMembers(members: TeamMember[], profile: FormatProfile):
   });
 }
 
+export function megaStonePenalty(members: TeamMember[], profile: FormatProfile): number {
+  const extraMegaStoneCount = Math.max(0, megaStoneMembers(members, profile).length - 1);
+  if (extraMegaStoneCount === 0) return 0;
+
+  const thirdAndLaterMegaStoneCount = Math.max(0, extraMegaStoneCount - 1);
+  return 3 + thirdAndLaterMegaStoneCount * 8;
+}
+
 export function multipleMegaStoneWarnings(members: TeamMember[], profile: FormatProfile): string[] {
   const megaMembers = megaStoneMembers(members, profile);
   if (megaMembers.length <= 1) return [];
