@@ -1,6 +1,6 @@
 import {scoreSetForTeamContext} from './sets';
 import {unsupportedTerrainSeedWarnings} from './fieldSupport';
-import {megaStoneMembers, multipleMegaStoneWarnings} from './itemConstraints';
+import {megaStonePenalty, multipleMegaStoneWarnings} from './itemConstraints';
 import type {
   FormatProfile,
   GenerateOptions,
@@ -181,9 +181,9 @@ function setToTeamFitScore(members: TeamMember[], profile: FormatProfile): numbe
   }
 
   score -= unsupportedTerrainSeedWarnings(members).length * 1.5;
-  score -= Math.max(0, megaStoneMembers(members, profile).length - 1) * 2;
+  score -= megaStonePenalty(members, profile);
 
-  return clamp(score, -5, 5);
+  return clamp(score, -12, 5);
 }
 
 function synergyScore(members: TeamMember[]): number {

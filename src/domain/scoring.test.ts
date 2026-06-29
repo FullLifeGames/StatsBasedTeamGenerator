@@ -128,10 +128,17 @@ describe('scoreTeam', () => {
       items: {scizorite: 100},
       moves: {bulletpunch: 100, uturn: 90, swordsdance: 80, roost: 70}
     });
-    const dataset = makeDataset([charizard, scizor]);
+    const venusaur = makePokemon({
+      id: 'venusaur',
+      name: 'Venusaur',
+      items: {venusaurite: 100},
+      moves: {gigadrain: 100, sludgebomb: 90, synthesis: 80, hiddenpowerfire: 70}
+    });
+    const dataset = makeDataset([charizard, scizor, venusaur]);
     const profile = inferFormatProfile('gen7ou');
     const charizardMember = member(charizard, 'gen7ou');
     const scizorMegaMember = member(scizor, 'gen7ou');
+    const venusaurMegaMember = member(venusaur, 'gen7ou');
     const scizorNonMegaMember = {
       ...scizorMegaMember,
       set: {
@@ -142,11 +149,17 @@ describe('scoreTeam', () => {
     };
 
     const multipleMega = scoreTeam([charizardMember, scizorMegaMember], dataset, profile);
+    const tooManyMega = scoreTeam([charizardMember, scizorMegaMember, venusaurMegaMember], dataset, profile);
     const singleMega = scoreTeam([charizardMember, scizorNonMegaMember], dataset, profile);
 
     expect(multipleMega.warnings).toContain('Multiple Mega Stones: Charizard (Charizardite X), Scizor (Scizorite)');
+    expect(tooManyMega.warnings).toContain(
+      'Multiple Mega Stones: Charizard (Charizardite X), Scizor (Scizorite), Venusaur (Venusaurite)'
+    );
     expect(singleMega.warnings).not.toContain('Multiple Mega Stones: Charizard (Charizardite X), Scizor (Scizorite)');
     expect(multipleMega.setToTeamFit).toBeLessThan(singleMega.setToTeamFit);
+    expect(tooManyMega.setToTeamFit).toBeLessThanOrEqual(-10);
+    expect(tooManyMega.setToTeamFit).toBeLessThan(multipleMega.setToTeamFit);
   });
 });
 
