@@ -186,7 +186,7 @@ describe('generateTeam', () => {
     expect(generateTeam(weatherDataset, 'gen9ou', {seeds: [], archetype: 'weather', novelty: 0}).members.map(member => member.stats.id))
       .toEqual(expect.arrayContaining(['pelipper', 'barraskewda']));
     expect(generateTeam(trickRoomDataset, 'gen9vgc2025regg', {seeds: [], archetype: 'trick-room', novelty: 0}).members.map(member => member.stats.id))
-      .toEqual(expect.arrayContaining(['cresselia']));
+      .toEqual(expect.arrayContaining(['cresselia', 'ursaluna']));
   });
 
   it('uses seeded novelty to vary equally strong teams', () => {

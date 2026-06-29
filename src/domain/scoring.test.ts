@@ -92,6 +92,33 @@ describe('scoreTeam', () => {
     expect(weather.total).toBeGreaterThan(balanced.total);
   });
 
+  it('penalizes Trick Room teams without slow partners', () => {
+    const cresselia = makePokemon({
+      id: 'cresselia',
+      name: 'Cresselia',
+      moves: {trickroom: 100, helpinghand: 90, moonblast: 80, protect: 70}
+    });
+    const dragapult = makePokemon({
+      id: 'dragapult',
+      name: 'Dragapult',
+      moves: {dracometeor: 100, shadowball: 90, uturn: 80, protect: 70}
+    });
+    const ursaluna = makePokemon({
+      id: 'ursaluna',
+      name: 'Ursaluna',
+      moves: {facade: 100, headlongrush: 90, protect: 80, earthquake: 70}
+    });
+    const dataset = makeDataset([cresselia, dragapult, ursaluna]);
+    const profile = inferFormatProfile('gen9vgc2025regg');
+    const unsupported = scoreTeam([member(cresselia, 'gen9vgc2025regg'), member(dragapult, 'gen9vgc2025regg')], dataset, profile, 'trick-room');
+    const supported = scoreTeam([member(cresselia, 'gen9vgc2025regg'), member(ursaluna, 'gen9vgc2025regg')], dataset, profile, 'trick-room');
+
+    expect(unsupported.warnings).toContain('Trick Room needs slow attackers or bulky partners to capitalize on the speed reversal');
+    expect(supported.warnings).not.toContain('Trick Room needs slow attackers or bulky partners to capitalize on the speed reversal');
+    expect(unsupported.setToTeamFit).toBeLessThan(supported.setToTeamFit);
+    expect(supported.total).toBeGreaterThan(unsupported.total);
+  });
+
   it('warns and penalizes terrain seeds without matching terrain support', () => {
     const hawlucha = makePokemon({
       id: 'hawlucha',

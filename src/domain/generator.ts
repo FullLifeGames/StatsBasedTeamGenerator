@@ -149,13 +149,31 @@ function beamSignature(members: TeamMember[]): string {
   return members.map(member => member.stats.id).sort().join('|');
 }
 
+function baseSpeed(stats: PokemonStats, profile: FormatProfile): number {
+  const species = Dex.forGen(profile.gen).species.get(stats.name);
+  return species.exists ? species.baseStats.spe : 100;
+}
+
+function trickRoomComplementScore(stats: PokemonStats, profile: FormatProfile): number {
+  const speed = baseSpeed(stats, profile);
+  const roles = detectRoles(stats, profile);
+  const pressure = Math.max(roles.physicalBreaker, roles.specialBreaker, roles.spreadPressure, roles.setup * 0.6);
+  const speedFit = speed <= 45 ? 3 : speed <= 60 ? 2 : speed <= 75 ? 0.75 : 0;
+
+  return speedFit + pressure * 2;
+}
+
+function teamHasTrickRoom(members: TeamMember[]): boolean {
+  return members.some(member => member.set.moves.some(move => toId(move) === 'trickroom'));
+}
+
 function roleScoreForArchetype(stats: PokemonStats, profile: FormatProfile, archetype: GenerateOptions['archetype']): number {
   const roles = detectRoles(stats, profile);
   if (archetype === 'weather') {
     return roles.weatherTerrainSetter * 4 + roles.weatherTerrainAbuser * 3;
   }
   if (archetype === 'trick-room') {
-    return (stats.moves.trickroom ? 4 : 0) + roles.speedControl * 2 + roles.positioning + roles.spreadPressure;
+    return (stats.moves.trickroom ? 4 : 0) + trickRoomComplementScore(stats, profile) + roles.speedControl * 2 + roles.positioning + roles.spreadPressure;
   }
   return 0;
 }
@@ -167,13 +185,17 @@ function candidatePool(
   selectedSpecies: Set<string>,
   novelty: number,
   randomSeed: number | undefined,
-  archetype: GenerateOptions['archetype']
+  archetype: GenerateOptions['archetype'],
+  members: TeamMember[]
 ): PokemonStats[] {
   return sortedPokemon(dataset, novelty, randomSeed)
     .filter(stats => !selectedIds.has(toId(stats.id)) && !selectedSpecies.has(speciesKey(stats, profile)))
     .sort((a, b) => {
+      const trickRoomDelta = teamHasTrickRoom(members)
+        ? trickRoomComplementScore(b, profile) - trickRoomComplementScore(a, profile)
+        : 0;
       const roleDelta = roleScoreForArchetype(b, profile, archetype) - roleScoreForArchetype(a, profile, archetype);
-      return roleDelta || 0;
+      return trickRoomDelta || roleDelta || 0;
     })
     .slice(0, candidateLimit);
 }
@@ -216,6 +238,14 @@ function withArchetypeAnchors(
 
   if (archetype === 'trick-room') {
     add(bestArchetypeCandidate(dataset, profile, next, bannedIds, stats => Boolean(stats.moves.trickroom), 'Added as Trick Room setter'));
+    add(bestArchetypeCandidate(
+      dataset,
+      profile,
+      next,
+      bannedIds,
+      stats => !stats.moves.trickroom && trickRoomComplementScore(stats, profile) >= 2,
+      'Added as slow Trick Room partner'
+    ));
   }
 
   return next;
@@ -236,7 +266,7 @@ function advanceBeams(
   for (const beam of beams) {
     const selectedIds = new Set([...bannedIds, ...beam.members.map(member => toId(member.stats.id))]);
     const speciesKeys = selectedSpeciesKeys(beam.members, profile, bannedIds, dataset);
-    for (const stats of candidatePool(dataset, profile, selectedIds, speciesKeys, novelty, randomSeed, archetype)) {
+    for (const stats of candidatePool(dataset, profile, selectedIds, speciesKeys, novelty, randomSeed, archetype, beam.members)) {
       const member = memberFromStats(stats, beam.members, profile, [
         `Added from usage rank with ${stats.usage.toFixed(1)}% usage`
       ]);
