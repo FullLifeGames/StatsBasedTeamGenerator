@@ -8,7 +8,17 @@ function isMessageBody(body: unknown): body is {message: string} {
 }
 
 async function readJson<T>(response: Response): Promise<T> {
-  const body = await response.json() as unknown;
+  let body: unknown;
+
+  try {
+    body = await response.json() as unknown;
+  } catch {
+    if (!response.ok) {
+      throw new Error(`API request failed with status ${response.status}`);
+    }
+
+    throw new Error('API returned invalid JSON. Please try again.');
+  }
 
   if (!response.ok) {
     if (isMessageBody(body)) {

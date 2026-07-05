@@ -23,6 +23,21 @@ const defaultDependencies: SmogonRouterDependencies = {
   fetchAnalysisSetTemplates,
   validateShowdownImport
 };
+const chaosCacheVersion = 'v2';
+
+class InvalidStatsJsonError extends Error {
+  constructor() {
+    super('Smogon returned invalid stats data. Please try again.');
+  }
+}
+
+function parseStatsJson(rawText: string): unknown {
+  try {
+    return JSON.parse(rawText);
+  } catch {
+    throw new InvalidStatsJsonError();
+  }
+}
 
 export function isValidStatsRequest(month: string, format: string, cutoff: string): boolean {
   if (!/^\d{4}-\d{2}$/.test(month) || !/^[a-z0-9]+$/.test(format) || !/^\d+$/.test(cutoff)) return false;
@@ -86,10 +101,12 @@ export function createSmogonRouter(dependencies: SmogonRouterDependencies = defa
     }
 
     try {
-      const rawText = await dependencies.cache(`chaos:${month}:${format}:${cutoffNumber}`, 24 * 60 * 60_000, () =>
-        dependencies.fetchText(url)
-      );
-      response.json(normalizeChaos(JSON.parse(rawText), {month, format, cutoff: cutoffNumber, url}));
+      const rawText = await dependencies.cache(`chaos:${chaosCacheVersion}:${month}:${format}:${cutoffNumber}`, 24 * 60 * 60_000, async () => {
+        const fetchedText = await dependencies.fetchText(url);
+        parseStatsJson(fetchedText);
+        return fetchedText;
+      });
+      response.json(normalizeChaos(parseStatsJson(rawText), {month, format, cutoff: cutoffNumber, url}));
     } catch (error) {
       response.status(502).json({
         message: error instanceof Error ? error.message : 'Unable to fetch Smogon chaos data'

@@ -42,6 +42,27 @@ describe('stats API client', () => {
     await expect(fetchStatsDataset('2026-03', 'gen91v1', 1500)).rejects.toThrow('Smogon is having a moment');
   });
 
+  it('fetchStatsDataset(month, format, cutoff) throws a readable API error when an error response is not JSON', async () => {
+    mockFetch({
+      ok: false,
+      status: 502,
+      json: () => Promise.reject(new SyntaxError('JSON.parse: unexpected character at line 1 column 1 of the JSON data'))
+    });
+
+    await expect(fetchStatsDataset('2026-06', 'gen9championsvgc2026regmbbo3', 1500))
+      .rejects.toThrow('API request failed with status 502');
+  });
+
+  it('fetchStatsIndex() throws a readable API error when a successful response is not JSON', async () => {
+    mockFetch({
+      ok: true,
+      status: 200,
+      json: () => Promise.reject(new SyntaxError('JSON.parse: unexpected character at line 1 column 1 of the JSON data'))
+    });
+
+    await expect(fetchStatsIndex()).rejects.toThrow('API returned invalid JSON');
+  });
+
   it('reuses an in-flight stats dataset request for matching month, format, and cutoff', async () => {
     const dataset = makeDataset([makePokemon({id: 'greattusk', name: 'Great Tusk'})]);
     let resolveResponse!: (response: Partial<Response> & {json: () => Promise<StatsDataset>}) => void;
