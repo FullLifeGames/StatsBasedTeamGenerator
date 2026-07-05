@@ -1,4 +1,4 @@
-import {Moon, Sun, WandSparkles} from 'lucide-react';
+import {LoaderCircle, Moon, Sun, WandSparkles} from 'lucide-react';
 import type {useGenerator} from '../data/useGenerator';
 
 type GeneratorState = ReturnType<typeof useGenerator>;
@@ -11,6 +11,7 @@ type ControlRailProps = Pick<
   | 'cutoff'
   | 'archetype'
   | 'loading'
+  | 'generating'
   | 'availableFormats'
   | 'availableCutoffs'
   | 'setMonth'
@@ -41,6 +42,7 @@ export function ControlRail({
   cutoff,
   archetype,
   loading,
+  generating,
   availableFormats,
   availableCutoffs,
   setMonth,
@@ -53,9 +55,10 @@ export function ControlRail({
 }: ControlRailProps & ThemeProps) {
   const months = index?.months ?? [];
   const canGenerate = Boolean(format) && !loading;
+  const generateLabel = generating ? 'Generating team' : 'Generate team';
 
   return (
-    <aside className="control-rail" aria-label="Generator controls">
+    <aside className="control-rail" aria-busy={loading || undefined} aria-label="Generator controls">
       <div className="control-rail__header">
         <p className="eyebrow">Smogon stats</p>
         <h1>Team Generator</h1>
@@ -131,10 +134,21 @@ export function ControlRail({
         </select>
       </label>
 
-      <button className="generate-button" type="button" onClick={() => void generate()} disabled={!canGenerate}>
-        <WandSparkles aria-hidden="true" size={18} />
-        Generate team
+      <button
+        className="generate-button"
+        type="button"
+        onClick={() => void generate()}
+        disabled={!canGenerate}
+        aria-busy={generating || undefined}
+      >
+        {generating ? (
+          <LoaderCircle className="generate-button__spinner" aria-hidden="true" size={18} />
+        ) : (
+          <WandSparkles aria-hidden="true" size={18} />
+        )}
+        {generateLabel}
       </button>
+      {generating ? <span className="sr-only" role="status">{generateLabel}</span> : null}
     </aside>
   );
 }

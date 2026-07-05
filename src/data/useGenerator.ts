@@ -135,6 +135,10 @@ async function withShowdownValidation(team: GeneratedTeam, format: string): Prom
   }
 }
 
+function allowBusyStateToPaint(): Promise<void> {
+  return new Promise(resolve => globalThis.setTimeout(resolve, 0));
+}
+
 export function useGenerator() {
   const [index, setIndex] = useState<StatsIndex | null>(null);
   const [dataset, setDataset] = useState<StatsDataset | null>(null);
@@ -145,6 +149,7 @@ export function useGenerator() {
   const [archetype, setArchetype] = useState<Archetype>('balanced');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   const hasCompleteSelection = Boolean(selection.month && selection.format && Number.isFinite(selection.cutoff));
 
@@ -263,9 +268,11 @@ export function useGenerator() {
     if (!hasCompleteSelection) return null;
 
     setLoading(true);
+    setGenerating(true);
     setError(null);
 
     try {
+      await allowBusyStateToPaint();
       const loadedDataset = await fetchStatsDataset(selection.month, selection.format, selection.cutoff);
       const validLockedIds = new Set(
         [...lockedIds].filter(id => Boolean(loadedDataset.pokemonById[id]))
@@ -289,6 +296,7 @@ export function useGenerator() {
       setError(caught instanceof Error ? caught.message : 'Unable to generate a team');
       return null;
     } finally {
+      setGenerating(false);
       setLoading(false);
     }
   }, [archetype, hasCompleteSelection, lockedIds, seeds, selection.cutoff, selection.format, selection.month, team]);
@@ -349,6 +357,7 @@ export function useGenerator() {
     archetype,
     error,
     loading,
+    generating,
     availableFormats,
     availableCutoffs,
     setMonth,
