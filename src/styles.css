@@ -257,14 +257,6 @@ select {
   overflow: hidden;
 }
 
-.pokemon-card::before {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 4px;
-  background: #d97706;
-  content: "";
-}
-
 .pokemon-card--locked {
   border-color: #0f766e;
   background: #eefcf8;
