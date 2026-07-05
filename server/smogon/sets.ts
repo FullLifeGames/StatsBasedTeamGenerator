@@ -12,11 +12,27 @@ interface JsonResponse {
 const gens = new Generations(Dex);
 const setFetchConcurrency = 8;
 
+class UpstreamJsonError extends Error {
+  constructor(readonly url: string, readonly status: number) {
+    super(`Unable to fetch ${url}: ${status}`);
+  }
+}
+
+function isMissingOptionalSetData(error: unknown): boolean {
+  return error instanceof UpstreamJsonError
+    && error.status === 404
+    && /\/sets\/[^/]+\.json$/.test(error.url);
+}
+
+function emptyTemplates(names: string[]): Record<string, AnalysisSetTemplate[]> {
+  return Object.fromEntries(names.map(name => [toId(name), []]));
+}
+
 function cachedFetch(cache: typeof readThroughCache): (url: string) => Promise<JsonResponse> {
   return async (url: string) => ({
     json: async () => JSON.parse(await cache(`data-pkmn:${url}`, 24 * 60 * 60_000, async () => {
       const response = await fetch(url);
-      if (!response.ok) throw new Error(`Unable to fetch ${url}: ${response.status}`);
+      if (!response.ok) throw new UpstreamJsonError(url, response.status);
       return response.text();
     })) as unknown
   });
@@ -90,13 +106,18 @@ export async function fetchAnalysisSetTemplates(
   const result: Record<string, AnalysisSetTemplate[]> = {};
   const names = [...new Set(pokemon.map(name => name.trim()).filter(Boolean))];
 
-  await mapWithConcurrency(names, setFetchConcurrency, async name => {
-    const sets = await smogon.sets(generation, name, format as ID);
-    const normalized = sets
-      .map(set => normalizeSet(set as Record<string, unknown>))
-      .filter((set): set is AnalysisSetTemplate => Boolean(set));
-    result[toId(name)] = normalized;
-  });
+  try {
+    await mapWithConcurrency(names, setFetchConcurrency, async name => {
+      const sets = await smogon.sets(generation, name, format as ID);
+      const normalized = sets
+        .map(set => normalizeSet(set as Record<string, unknown>))
+        .filter((set): set is AnalysisSetTemplate => Boolean(set));
+      result[toId(name)] = normalized;
+    });
+  } catch (error) {
+    if (isMissingOptionalSetData(error)) return emptyTemplates(names);
+    throw error;
+  }
 
   return result;
 }
