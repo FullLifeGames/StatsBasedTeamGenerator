@@ -13,6 +13,8 @@ import {
 
 type Archetype = GenerateOptions['archetype'];
 
+export const defaultGenerationNovelty = 0.55;
+
 interface Selection {
   month: string;
   format: string;
@@ -283,7 +285,7 @@ export function useGenerator() {
         seeds,
         lockedMembers,
         archetype,
-        novelty: 0.3,
+        novelty: defaultGenerationNovelty,
         randomSeed: Math.floor(Math.random() * 1_000_000)
       });
       const teamWithLockedFlags = await withShowdownValidation(withLockedFlags(generatedTeam, validLockedIds), selection.format);
@@ -323,7 +325,7 @@ export function useGenerator() {
         lockedMembers: preservedMembers,
         bannedMembers: [normalizedId],
         archetype,
-        novelty: 0.3,
+        novelty: defaultGenerationNovelty,
         randomSeed: Math.floor(Math.random() * 1_000_000)
       });
       const teamWithLockedFlags = await withShowdownValidation(withLockedFlags(generatedTeam, validLockedIds), selection.format);

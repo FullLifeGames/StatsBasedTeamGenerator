@@ -3,7 +3,7 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 import {makeDataset, makePokemon} from '../test/fixtures';
 import type {StatsDataset, StatsIndex} from '../domain/types';
 import {clearApiCaches} from './api';
-import {useGenerator} from './useGenerator';
+import {defaultGenerationNovelty, useGenerator} from './useGenerator';
 
 const index: StatsIndex = {
   months: ['2026-02', '2026-03'],
@@ -75,6 +75,10 @@ describe('useGenerator', () => {
   afterEach(() => {
     clearApiCaches();
     vi.unstubAllGlobals();
+  });
+
+  it('uses a stronger default novelty for more varied generated teams', () => {
+    expect(defaultGenerationNovelty).toBe(0.55);
   });
 
   it('loads index and generates a team from mocked fetch responses', async () => {
