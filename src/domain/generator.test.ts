@@ -19,14 +19,28 @@ function ouPokemon(overrides: Partial<PokemonStats> & Pick<PokemonStats, 'id' | 
   });
 }
 
-function lockedMember(stats: PokemonStats): TeamMember {
-  const profile = inferFormatProfile('gen9ou');
+function lockedMember(stats: PokemonStats, format = 'gen9ou'): TeamMember {
+  const profile = inferFormatProfile(format);
   return {
     stats,
     set: buildSetCandidates(stats, profile)[0],
     locked: true,
     explanation: ['Locked by user']
   };
+}
+
+function gen7Pokemon(overrides: Partial<PokemonStats> & Pick<PokemonStats, 'id' | 'name'>): PokemonStats {
+  return makePokemon({
+    usage: 10,
+    rawCount: 1000,
+    viability: 80,
+    abilities: {pressure: 100},
+    items: {leftovers: 100},
+    spreads: {'Jolly:0/252/4/0/0/252': 100},
+    moves: {earthquake: 100, toxic: 90, protect: 80, substitute: 70},
+    teraTypes: {},
+    ...overrides
+  });
 }
 
 describe('generateTeam', () => {
@@ -123,6 +137,75 @@ describe('generateTeam', () => {
     expect(team.members[0].stats.id).toBe('garganacl');
     expect(team.members[0].locked).toBe(true);
     expect(team.members.filter(member => member.stats.id === 'garganacl')).toHaveLength(1);
+  });
+
+  it('keeps the first forced Mega and skips later locked Megas', () => {
+    const charizard = gen7Pokemon({
+      id: 'charizard',
+      name: 'Charizard',
+      usage: 50,
+      items: {charizarditex: 100},
+      moves: {flamethrower: 100, dragonclaw: 90, roost: 80, earthquake: 70}
+    });
+    const scizor = gen7Pokemon({
+      id: 'scizor',
+      name: 'Scizor',
+      usage: 49,
+      items: {scizorite: 100},
+      moves: {bulletpunch: 100, uturn: 90, swordsdance: 80, roost: 70}
+    });
+    const dataset = makeDataset([
+      charizard,
+      scizor,
+      gen7Pokemon({id: 'landorustherian', name: 'Landorus-Therian', usage: 48}),
+      gen7Pokemon({id: 'heatran', name: 'Heatran', usage: 47}),
+      gen7Pokemon({id: 'clefable', name: 'Clefable', usage: 46}),
+      gen7Pokemon({id: 'latios', name: 'Latios', usage: 45}),
+      gen7Pokemon({id: 'tyranitar', name: 'Tyranitar', usage: 44})
+    ]);
+
+    const team = generateTeam(dataset, 'gen7ou', {
+      seeds: [],
+      lockedMembers: [lockedMember(charizard, 'gen7ou'), lockedMember(scizor, 'gen7ou')],
+      archetype: 'balanced',
+      novelty: 0
+    });
+    const memberIds = team.members.map(member => member.stats.id);
+
+    expect(memberIds).toContain('charizard');
+    expect(memberIds).not.toContain('scizor');
+    expect(team.score.warnings).not.toContain('Multiple Mega Stones: Charizard (Charizardite X), Scizor (Scizorite)');
+  });
+
+  it('does not auto-fill a second Mega after one Mega has already been selected', () => {
+    const dataset = makeDataset([
+      gen7Pokemon({
+        id: 'charizard',
+        name: 'Charizard',
+        usage: 50,
+        items: {charizarditex: 100},
+        moves: {flamethrower: 100, dragonclaw: 90, roost: 80, earthquake: 70}
+      }),
+      gen7Pokemon({
+        id: 'scizor',
+        name: 'Scizor',
+        usage: 49,
+        items: {scizorite: 100},
+        moves: {bulletpunch: 100, uturn: 90, swordsdance: 80, roost: 70}
+      }),
+      gen7Pokemon({id: 'landorustherian', name: 'Landorus-Therian', usage: 48})
+    ]);
+
+    const team = generateTeam(dataset, 'gen7ou', {
+      seeds: ['charizard'],
+      archetype: 'balanced',
+      novelty: 0
+    });
+    const memberIds = team.members.map(member => member.stats.id);
+
+    expect(memberIds).toContain('charizard');
+    expect(memberIds).not.toContain('scizor');
+    expect(team.score.warnings).toHaveLength(0);
   });
 
   it('builds later sets with existing role context to avoid redundant singles hazards', () => {

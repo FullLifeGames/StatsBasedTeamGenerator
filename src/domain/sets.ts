@@ -18,6 +18,7 @@ const evLabels = ['HP', 'Atk', 'Def', 'SpA', 'SpD', 'Spe'];
 const evKeys = ['hp', 'atk', 'def', 'spa', 'spd', 'spe'] as const;
 const noAbilityIds = new Set(['', 'noability', 'none']);
 const noItemIds = new Set(['', 'nothing', 'noitem', 'none']);
+const noTeraTypeIds = new Set(['', 'nothing', 'none']);
 const choiceItemIds = new Set(['choiceband', 'choicescarf', 'choicespecs']);
 const assaultVestId = 'assaultvest';
 const choiceUtilityMoves = new Set(['batonpass', 'switcheroo', 'trick']);
@@ -101,7 +102,7 @@ function legalItemId(profile: FormatProfile, id: string): string {
 }
 
 function legalTeraTypeId(profile: FormatProfile, id: string): string {
-  return profile.gen >= 9 ? id : '';
+  return profile.gen >= 9 && !noTeraTypeIds.has(id) ? id : '';
 }
 
 function existingRoleScore(context: TeamContext | undefined, role: keyof RoleScores): number {

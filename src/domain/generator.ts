@@ -5,6 +5,7 @@ import {scoreTeam, attachInsights} from './scoring';
 import {buildSetCandidates} from './sets';
 import {toId} from './id';
 import {detectRoles} from './roles';
+import {isMegaStone} from './itemConstraints';
 import type {
   FormatProfile,
   GenerateOptions,
@@ -70,6 +71,15 @@ function existingUsedItems(members: TeamMember[]): Set<string> {
   return new Set(members.map(member => member.set.itemId ?? member.set.item).filter(Boolean));
 }
 
+function memberHasMegaStone(member: TeamMember, profile: FormatProfile): boolean {
+  const itemId = member.set.itemId ?? member.set.item;
+  return Boolean(itemId && isMegaStone(profile, toId(itemId)));
+}
+
+function canAddMember(members: TeamMember[], candidate: TeamMember, profile: FormatProfile): boolean {
+  return !memberHasMegaStone(candidate, profile) || !members.some(member => memberHasMegaStone(member, profile));
+}
+
 function rankingScore(members: TeamMember[], trueScore: number, novelty: number, randomSeed?: number): number {
   if (randomSeed === undefined || novelty <= 0) return trueScore;
   const noveltyWeight = Math.max(0, Math.min(1, novelty));
@@ -123,6 +133,7 @@ function uniqueInitialMembers(
     const id = toId(locked.stats.id);
     const baseSpecies = speciesKey(locked.stats, profile);
     if (selected.has(id) || selectedSpecies.has(baseSpecies)) continue;
+    if (!canAddMember(members, locked, profile)) continue;
     selected.add(id);
     selectedSpecies.add(baseSpecies);
     members.push(locked);
@@ -137,9 +148,12 @@ function uniqueInitialMembers(
     const baseSpecies = speciesKey(stats, profile);
     if (selectedSpecies.has(baseSpecies)) continue;
 
+    const member = memberFromStats(stats, members, profile, ['Seeded by user']);
+    if (!canAddMember(members, member, profile)) continue;
+
     selected.add(id);
     selectedSpecies.add(baseSpecies);
-    members.push(memberFromStats(stats, members, profile, ['Seeded by user']));
+    members.push(member);
   }
 
   return members;
@@ -212,9 +226,14 @@ function bestArchetypeCandidate(
   const speciesKeys = selectedSpeciesKeys(members, profile, bannedIds, dataset);
   const stats = [...dataset.pokemon]
     .filter(candidate => !selectedIds.has(toId(candidate.id)) && !speciesKeys.has(speciesKey(candidate, profile)) && predicate(candidate))
-    .sort((a, b) => b.usage - a.usage)[0];
+    .sort((a, b) => b.usage - a.usage);
 
-  return stats ? memberFromStats(stats, members, profile, [explanation]) : null;
+  for (const candidate of stats) {
+    const member = memberFromStats(candidate, members, profile, [explanation]);
+    if (canAddMember(members, member, profile)) return member;
+  }
+
+  return null;
 }
 
 function withArchetypeAnchors(
@@ -228,6 +247,7 @@ function withArchetypeAnchors(
   let next = [...members];
   const add = (candidate: TeamMember | null): void => {
     if (!candidate || next.length >= targetSize) return;
+    if (!canAddMember(next, candidate, profile)) return;
     next = [...next, candidate];
   };
 
@@ -270,6 +290,8 @@ function advanceBeams(
       const member = memberFromStats(stats, beam.members, profile, [
         `Added from usage rank with ${stats.usage.toFixed(1)}% usage`
       ]);
+      if (!canAddMember(beam.members, member, profile)) continue;
+
       const members = [...beam.members, member];
       const trueScore = scoreTeam(members, dataset, profile, archetype).total;
       next.push({

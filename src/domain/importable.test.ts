@@ -45,6 +45,24 @@ describe('formatSet', () => {
     expect(text).not.toContain('Tera Type:');
     expect(text).toContain('- Body Slam');
   });
+
+  it('omits Nothing tera type sentinels from Showdown import text', () => {
+    const [set] = buildSetCandidates(makePokemon({
+      id: 'greattusk',
+      name: 'Great Tusk',
+      abilities: {protosynthesis: 100},
+      items: {boosterenergy: 100},
+      spreads: {'Jolly:0/252/4/0/0/252': 100},
+      moves: {rapidspin: 90, headlongrush: 90, stealthrock: 50, knockoff: 35},
+      teraTypes: {nothing: 100}
+    }), inferFormatProfile('gen9ou'));
+
+    const text = formatSet(set);
+
+    expect(text).toContain('Great Tusk @ Booster Energy');
+    expect(text).not.toContain('Tera Type: Nothing');
+    expect(text).not.toContain('Tera Type:');
+  });
 });
 
 describe('formatTeam', () => {
