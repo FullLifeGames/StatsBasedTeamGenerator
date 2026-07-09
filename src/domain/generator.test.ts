@@ -404,6 +404,23 @@ describe('generateTeam', () => {
     expect(team.score.warnings).not.toContain('Rain is set but nothing on the team takes advantage of it');
   });
 
+  it('does not force a weather ability the format never actually plays', () => {
+    // Whimsicott can have Chlorophyll, but runs Prankster in essentially every
+    // recorded set because Prankster is better even in sun. The refit must not
+    // invent a set nobody uses just to pair the weather.
+    const dataset = makeDataset([
+      ouPokemon({id: 'whimsicott', name: 'Whimsicott', usage: 28, abilities: {prankster: 999, chlorophyll: 0.4}, moves: {tailwind: 100, encore: 90, moonblast: 80, protect: 70}}),
+      ouPokemon({id: 'torkoal', name: 'Torkoal', usage: 18, abilities: {drought: 100}, moves: {eruption: 100, lavaplume: 90, bodypress: 80, yawn: 70}}),
+      ouPokemon({id: 'venusaur', name: 'Venusaur', usage: 17, abilities: {chlorophyll: 100}, moves: {growth: 100, gigadrain: 90, sludgebomb: 80, weatherball: 70}})
+    ]);
+
+    const team = generateTeam(dataset, 'gen9vgc2025regg', {seeds: ['Torkoal', 'Whimsicott', 'Venusaur'], archetype: 'balanced', novelty: 0});
+    const whimsicott = team.members.find(member => member.stats.id === 'whimsicott')!;
+
+    expect(whimsicott.set.ability).toBe('Prankster');
+    expect(whimsicott.explanation.some(entry => entry.startsWith('Switched'))).toBe(false);
+  });
+
   it('switches a Pokemon off a weather ability the team never sets', () => {
     const dataset = makeDataset([
       ouPokemon({id: 'excadrill', name: 'Excadrill', usage: 30, abilities: {sandrush: 70, moldbreaker: 30}, moves: {earthquake: 100, ironhead: 90, rapidspin: 80, swordsdance: 70}}),

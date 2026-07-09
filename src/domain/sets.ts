@@ -31,6 +31,14 @@ interface TeamContext {
  */
 const biasWeight = 0.45;
 const minimumShare = 0.04;
+
+/**
+ * Lowest share of a Pokemon's recorded abilities that counts as evidence the
+ * format plays it. Basculegion's Swift Swim sits near 4% in metas where rain is
+ * rare and is a real choice; Whimsicott's Chlorophyll sits near 0% because
+ * Prankster is better even in sun.
+ */
+const minimumRefitAbilityShare = 0.02;
 const minimumAttackingMoves = 1;
 const maximumHazardMoves = 2;
 const hazardMoveIds = new Set(['stealthrock', 'spikes', 'toxicspikes', 'stickyweb']);
@@ -439,11 +447,17 @@ function average(values: number[]): number {
 export function bestConditionAbility(stats: PokemonStats, profile: FormatProfile, conditions: Set<FieldCondition>): string {
   if (!conditions.size) return '';
 
-  // Popularity is not the question here: the team already brings the weather,
-  // so any ability that uses it beats one that ignores it. Requiring non-zero
-  // usage keeps the pick to abilities the format actually plays.
-  const [abilityId] = Object.entries(realAbilities(stats))
-    .filter(([id, weight]) => weight > 0 && abilityConditionBias(id, conditions) > 0)
+  // The team already brings the weather, so a weather ability beats a more
+  // popular one that ignores it — but only when the format genuinely plays
+  // that pairing. Whimsicott can have Chlorophyll, yet runs Prankster in
+  // essentially 100% of its sets because Prankster is simply better even in
+  // sun; a share floor keeps the refit from inventing sets nobody uses.
+  const abilities = realAbilities(stats);
+  const total = tableTotal(abilities);
+  if (total <= 0) return '';
+
+  const [abilityId] = Object.entries(abilities)
+    .filter(([id, weight]) => weight / total >= minimumRefitAbilityShare && abilityConditionBias(id, conditions) > 0)
     .sort(([, a], [, b]) => b - a)[0] ?? [''];
 
   const legal = legalAbilityId(profile, abilityId);
