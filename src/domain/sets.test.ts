@@ -13,6 +13,47 @@ const greatTuskStats = makePokemon({
   teraTypes: {steel: 40}
 });
 
+describe('buildSetCandidates ability resolution', () => {
+  it('ignores the noability slot Showdown records for Mega formes', () => {
+    // Showdown logs the pre-Mega slot as `noability`, and it outweighs No Guard.
+    const raichu = makePokemon({
+      id: 'raichumegay',
+      name: 'Raichu-Mega-Y',
+      abilities: {noability: 243, noguard: 89},
+      moves: {zapcannon: 100, focusblast: 90, electroweb: 80, nastyplot: 70}
+    });
+
+    expect(buildSetCandidates(raichu, inferFormatProfile('gen9ou'))[0].ability).toBe('No Guard');
+  });
+
+  it('falls back to the dex when the stats offer no real ability', () => {
+    const staraptor = makePokemon({
+      id: 'staraptormega',
+      name: 'Staraptor-Mega',
+      abilities: {noability: 348},
+      moves: {bravebird: 100, closecombat: 90, uturn: 80, roost: 70}
+    });
+
+    expect(buildSetCandidates(staraptor, inferFormatProfile('gen9ou'))[0].ability).toBe('Contrary');
+  });
+
+  it('still prefers the most-used real ability', () => {
+    const excadrill = makePokemon({
+      id: 'excadrill',
+      name: 'Excadrill',
+      abilities: {noability: 500, sandrush: 70, moldbreaker: 30},
+      moves: {earthquake: 100, ironhead: 90, rapidspin: 80, swordsdance: 70}
+    });
+
+    expect(buildSetCandidates(excadrill, inferFormatProfile('gen9ou'))[0].ability).toBe('Sand Rush');
+  });
+
+  it('leaves abilities empty in generations before they existed', () => {
+    const tauros = makePokemon({id: 'tauros', name: 'Tauros', moves: {bodyslam: 100, hyperbeam: 90}});
+    expect(buildSetCandidates(tauros, inferFormatProfile('gen1ou'))[0].ability).toBe('');
+  });
+});
+
 describe('buildSetCandidates', () => {
   it('builds likely sets from weighted Great Tusk stats', () => {
     const [set] = buildSetCandidates(greatTuskStats, inferFormatProfile('gen9ou'));

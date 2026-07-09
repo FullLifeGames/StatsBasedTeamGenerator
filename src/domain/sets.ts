@@ -156,6 +156,35 @@ function legalAbilityId(profile: FormatProfile, id: string): string {
   return profile.gen >= 3 && !noAbilityIds.has(id) ? id : '';
 }
 
+function isRealAbility(id: string): boolean {
+  return !noAbilityIds.has(toId(id));
+}
+
+function realAbilities(stats: PokemonStats): WeightedTable {
+  return Object.fromEntries(Object.entries(stats.abilities).filter(([id]) => isRealAbility(id)));
+}
+
+/**
+ * Showdown records `noability` for the pre-Mega slot of a Mega forme, and it can
+ * outweigh the forme's real ability in the usage table. The dex knows what the
+ * species actually has, so it is the fallback when the stats offer nothing.
+ */
+function dexPrimaryAbility(profile: FormatProfile, stats: PokemonStats): string {
+  if (profile.gen < 3) return '';
+
+  const species = Dex.forGen(profile.gen).species.get(stats.name);
+  if (!species.exists) return '';
+
+  const [ability] = Object.values(species.abilities).filter(Boolean);
+  return ability ? toId(ability) : '';
+}
+
+/** The most-used ability the Pokemon actually has, falling back to the dex. */
+function resolveAbilityId(profile: FormatProfile, stats: PokemonStats, selected: string): string {
+  const legal = legalAbilityId(profile, selected);
+  return legal || dexPrimaryAbility(profile, stats);
+}
+
 function legalItemId(profile: FormatProfile, id: string): string {
   return profile.gen >= 2 && !noItemIds.has(id) ? id : '';
 }
@@ -348,7 +377,8 @@ function templateAllowedByContext(template: AnalysisSetTemplate, context?: TeamC
 function analysisCandidate(stats: PokemonStats, profile: FormatProfile, template: AnalysisSetTemplate): SetCandidate | null {
   const moveIds = template.moves.map(toId).filter(Boolean).slice(0, 4);
   if (!moveIds.length) return null;
-  const abilityId = template.ability ? toId(template.ability) : topEntries(stats.abilities)[0]?.[0] ?? '';
+  const usedAbilityId = topEntries(realAbilities(stats))[0]?.[0] ?? '';
+  const abilityId = resolveAbilityId(profile, stats, template.ability ? toId(template.ability) : usedAbilityId);
   const itemId = template.item ? toId(template.item) : topEntries(stats.items)[0]?.[0] ?? '';
   const teraTypeId = template.teraType ? toId(template.teraType) : topEntries(stats.teraTypes)[0]?.[0] ?? '';
 
@@ -412,7 +442,7 @@ export function bestConditionAbility(stats: PokemonStats, profile: FormatProfile
   // Popularity is not the question here: the team already brings the weather,
   // so any ability that uses it beats one that ignores it. Requiring non-zero
   // usage keeps the pick to abilities the format actually plays.
-  const [abilityId] = Object.entries(stats.abilities)
+  const [abilityId] = Object.entries(realAbilities(stats))
     .filter(([id, weight]) => weight > 0 && abilityConditionBias(id, conditions) > 0)
     .sort(([, a], [, b]) => b - a)[0] ?? [''];
 
@@ -425,7 +455,7 @@ export function bestConditionAbility(stats: PokemonStats, profile: FormatProfile
  * Sand Rush with no sandstorm is a dead slot; Mold Breaker is not.
  */
 export function bestWeatherFreeAbility(stats: PokemonStats, profile: FormatProfile, conditions: Set<FieldCondition>): string {
-  const [abilityId] = Object.entries(stats.abilities)
+  const [abilityId] = Object.entries(realAbilities(stats))
     .filter(([id, weight]) => weight > 0 && !dependsOnMissingWeather(id, conditions))
     .sort(([, a], [, b]) => b - a)[0] ?? [''];
 
@@ -445,7 +475,8 @@ export function buildSetCandidates(stats: PokemonStats, profile: FormatProfile, 
   const teamConditions = context?.teamConditions ?? new Set<FieldCondition>();
   const [abilityId, abilityWeight] = pickBiased(
     stats.abilities,
-    id => (archetype ? abilityBias(id, archetype) : 0) + abilityConditionBias(id, teamConditions)
+    id => (archetype ? abilityBias(id, archetype) : 0) + abilityConditionBias(id, teamConditions),
+    isRealAbility
   );
   const usedItemIds = new Set([...(context?.usedItems ?? new Set<string>())].map(toId));
   const [selectedItemId, itemWeight] = pickBiased(stats.items, id => archetype ? itemBias(id, archetype) : 0, candidateItemId => {
@@ -456,7 +487,7 @@ export function buildSetCandidates(stats: PokemonStats, profile: FormatProfile, 
   });
   const [spreadId, spreadWeight] = pickSpread(stats.spreads, archetype);
   const [[teraTypeId, teraTypeWeight] = ['', 0]] = topEntries(stats.teraTypes);
-  const ability = legalAbilityId(profile, abilityId);
+  const ability = resolveAbilityId(profile, stats, abilityId);
   const item = legalItemId(profile, selectedItemId);
   const teraType = legalTeraTypeId(profile, teraTypeId);
   const moveIds = selectedMoveIds(stats, profile, item, context);

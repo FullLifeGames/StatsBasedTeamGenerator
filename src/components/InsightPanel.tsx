@@ -1,4 +1,5 @@
 import {AlertTriangle, ShieldCheck} from 'lucide-react';
+import {membersWithCounterData} from '../domain/scoring';
 import type {GeneratedTeam, ScoreBreakdown} from '../domain/types';
 import {CopyImportableButton} from './CopyImportableButton';
 
@@ -40,6 +41,7 @@ export function InsightPanel({team}: InsightPanelProps) {
   const visibleScores = team.score.leads > 0 ? [...scoreLabels, ['leads', 'Lead'] as const] : scoreLabels;
   const coveredThreats = team.threats.filter(threat => threat.covered).length;
   const hasThreatCoverage = team.threats.length > 0;
+  const membersWithData = membersWithCounterData(team.members);
   const topSynergy = team.synergy.slice(0, 4);
 
   return (
@@ -68,6 +70,11 @@ export function InsightPanel({team}: InsightPanelProps) {
             <p className="insight-kicker">
               {coveredThreats}/{team.threats.length} tracked threats covered
             </p>
+            {membersWithData < team.members.length ? (
+              <p className="insight-kicker">
+                {`Only ${membersWithData} of ${team.members.length} have checks data, so coverage is a partial picture.`}
+              </p>
+            ) : null}
             <ul className="threat-list">
               {team.threats.map(threat => (
                 <li key={threat.threatId}>
@@ -88,7 +95,7 @@ export function InsightPanel({team}: InsightPanelProps) {
           </>
         ) : (
           <p className="insight-kicker">
-            Checks and counters data is not available for this stats file.
+            No Pokemon on this team has checks and counters data, so coverage cannot be judged.
           </p>
         )}
       </section>

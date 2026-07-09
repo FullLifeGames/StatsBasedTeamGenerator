@@ -108,12 +108,17 @@ function confidenceForThreat(edge: {samples: number; probability: number; deviat
   return edge.probability * Math.min(1, edge.samples / 40) * (1 - Math.min(0.5, edge.deviation));
 }
 
-function hasCounterData(dataset: StatsDataset): boolean {
-  return dataset.pokemon.some(stats => stats.checks.length > 0);
+/**
+ * A Pokemon with no checks-and-counters data cannot answer anything, which is
+ * not the same as failing to. Coverage is only meaningful when at least one
+ * member of this team has data, rather than merely someone in the stats file.
+ */
+export function membersWithCounterData(members: TeamMember[]): number {
+  return members.filter(member => member.stats.checks.length > 0).length;
 }
 
 export function threatCoverage(members: TeamMember[], dataset: StatsDataset, limit = 24): ThreatCoverage[] {
-  if (!hasCounterData(dataset)) return [];
+  if (!membersWithCounterData(members)) return [];
 
   const teamIds = new Set(members.map(member => member.stats.id));
   const threats = dataset.pokemon

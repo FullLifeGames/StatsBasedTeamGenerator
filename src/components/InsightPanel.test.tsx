@@ -61,6 +61,30 @@ describe('InsightPanel', () => {
     expect(screen.getByDisplayValue(/Great Tusk/)).toBeInTheDocument();
   });
 
+  it('discloses how thin the checks data is when only some members have it', () => {
+    const informed = makePokemon({
+      id: 'kingambit',
+      name: 'Kingambit',
+      usage: 25,
+      moves: {kowtowcleave: 100, suckerpunch: 95},
+      checks: [{target: 'gholdengo', samples: 60, probability: 0.7, deviation: 0.05}]
+    });
+    const blind = makePokemon({id: 'dragapult', name: 'Dragapult', usage: 28, moves: {dracometeor: 100, shadowball: 90}});
+    // Threats the team does not contain, so there is coverage to report on.
+    const threats = Array.from({length: 4}, (_, index) => makePokemon({
+      id: `threat${index}`,
+      name: `Threat ${index}`,
+      usage: 20 - index,
+      moves: {tackle: 100}
+    }));
+    const thinDataset = makeDataset([informed, blind, ...threats]);
+    const team = generateTeam(thinDataset, 'gen91v1', {seeds: ['Kingambit', 'Dragapult'], archetype: 'balanced', novelty: 0});
+
+    render(<InsightPanel team={team} />);
+
+    expect(screen.getByText(/have checks data/i)).toBeInTheDocument();
+  });
+
   it('shows Showdown validation results when they are available', () => {
     const team = {
       ...generateTeam(dataset, 'gen91v1', {
@@ -120,7 +144,7 @@ describe('InsightPanel', () => {
     expect(screen.getByText(/Covered by Great Tusk/)).toBeInTheDocument();
   });
 
-  it('shows threat coverage as unavailable when the stats file has no checks and counters data', () => {
+  it('shows threat coverage as unjudgeable when no member has checks and counters data', () => {
     const team = generateTeam(dataset, 'gen91v1', {
       seeds: ['Great Tusk'],
       archetype: 'balanced',
@@ -129,7 +153,7 @@ describe('InsightPanel', () => {
 
     render(<InsightPanel team={team} />);
 
-    expect(screen.getByText('Checks and counters data is not available for this stats file.')).toBeInTheDocument();
+    expect(screen.getByText(/coverage cannot be judged/i)).toBeInTheDocument();
     expect(screen.queryByText(/tracked threats covered/)).not.toBeInTheDocument();
   });
 

@@ -3,7 +3,7 @@ import {makeDataset, makePokemon} from '../test/fixtures';
 import {inferFormatProfile} from './formatProfile';
 import {buildSetCandidates} from './sets';
 import type {PokemonStats, TeamMember} from './types';
-import {scoreTeam, synergyInsights, threatCoverage} from './scoring';
+import {membersWithCounterData, scoreTeam, synergyInsights, threatCoverage} from './scoring';
 
 function member(stats: PokemonStats, format = 'gen9ou'): TeamMember {
   const profile = inferFormatProfile(format);
@@ -297,6 +297,26 @@ describe('threatCoverage', () => {
     const dataset = makeDataset([answer, ...threats]);
 
     expect(threatCoverage([member(answer)], dataset)).toHaveLength(18);
+  });
+
+  it('reports nothing when this team has no data, even if other Pokemon do', () => {
+    // A Pokemon without checks data cannot answer a threat, which is not the
+    // same as failing to answer it.
+    const informed = makePokemon({id: 'kingambit', name: 'Kingambit', usage: 30, checks: [{target: 'greattusk', samples: 50, probability: 0.7, deviation: 0.05}]});
+    const blind = makePokemon({id: 'raichumegay', name: 'Raichu-Mega-Y', usage: 20});
+    const greatTusk = makePokemon({id: 'greattusk', name: 'Great Tusk', usage: 28});
+    const dataset = makeDataset([informed, blind, greatTusk]);
+
+    expect(threatCoverage([member(blind)], dataset)).toEqual([]);
+    expect(threatCoverage([member(informed)], dataset).length).toBeGreaterThan(0);
+  });
+
+  it('counts how many members can speak to threat coverage at all', () => {
+    const informed = makePokemon({id: 'kingambit', name: 'Kingambit', usage: 30, checks: [{target: 'greattusk', samples: 50, probability: 0.7, deviation: 0.05}]});
+    const blind = makePokemon({id: 'raichumegay', name: 'Raichu-Mega-Y', usage: 20});
+
+    expect(membersWithCounterData([member(informed), member(blind)])).toBe(1);
+    expect(membersWithCounterData([member(blind)])).toBe(0);
   });
 });
 
