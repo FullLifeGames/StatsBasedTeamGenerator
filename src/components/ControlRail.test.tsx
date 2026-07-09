@@ -36,6 +36,18 @@ function renderControlRail(overrides: Partial<ComponentProps<typeof ControlRail>
 }
 
 describe('ControlRail', () => {
+  it('offers hyper offense as an archetype', () => {
+    renderControlRail();
+
+    expect(screen.getByRole('option', {name: 'Hyper offense'})).toBeInTheDocument();
+  });
+
+  it('describes the selected archetype', () => {
+    renderControlRail({archetype: 'stall'});
+
+    expect(screen.getByText(/wins by outlasting/i)).toBeInTheDocument();
+  });
+
   it('shows a busy state while team generation is loading', () => {
     renderControlRail({loading: true, generating: true});
 

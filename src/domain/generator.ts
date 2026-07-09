@@ -1,10 +1,11 @@
 import {Dex} from '@pkmn/dex';
+import {memberArchetypeFit, setArchetypeScore, statAxes} from './archetype';
 import {inferFormatProfile, emptyRoles} from './formatProfile';
 import {formatTeam} from './importable';
 import {scoreTeam, attachInsights} from './scoring';
 import {buildSetCandidates} from './sets';
 import {toId} from './id';
-import {detectRoles} from './roles';
+import {detectRoles, detectRolesForMoves} from './roles';
 import {isMegaStone} from './itemConstraints';
 import {applyLead} from './leads';
 import {createRng, sampleByScore, samplingTemperature} from './sampling';
@@ -21,11 +22,13 @@ import {
 } from './weather';
 import type {FieldCondition} from './weather';
 import type {
+  Archetype,
   FormatProfile,
   GenerateOptions,
   GeneratedTeam,
   PokemonStats,
   RoleScores,
+  SetCandidate,
   StatsDataset,
   TeamMember
 } from './types';
@@ -104,19 +107,90 @@ function sortedPokemon(dataset: StatsDataset, novelty: number, randomSeed?: numb
   });
 }
 
+const trickRoomId = 'trickroom';
+const minTrickRoomShare = 0.15;
+
+function setHasMove(set: SetCandidate, moveId: string): boolean {
+  return set.moves.some(move => toId(move) === moveId);
+}
+
+/** Share of this Pokemon's four-move sets that carried the move. */
+function moveShare(stats: PokemonStats, moveId: string): number {
+  const total = Object.values(stats.moves).reduce((sum, weight) => sum + weight, 0);
+  if (total <= 0) return 0;
+  return (stats.moves[moveId] ?? 0) / (total / 4);
+}
+
+function setArchetypeBonus(candidate: SetCandidate, archetype: Archetype): number {
+  // A Trick Room team is defined by the move, so a set that actually clicks it
+  // beats one that merely belongs to a Pokemon that sometimes runs it.
+  if (archetype === 'trick-room' && setHasMove(candidate, trickRoomId)) return 5;
+  return 0;
+}
+
+/** Picks the candidate set that best serves the archetype, keeping stats order as the tiebreak. */
+function chooseSet(candidates: SetCandidate[], archetype: Archetype): SetCandidate {
+  if (archetype === 'balanced' || candidates.length < 2) return candidates[0];
+
+  const score = (candidate: SetCandidate): number => setArchetypeScore(candidate, archetype) + setArchetypeBonus(candidate, archetype);
+  return candidates.reduce((best, candidate) => score(candidate) > score(best) ? candidate : best, candidates[0]);
+}
+
+/**
+ * Puts a move onto a member's set, dropping its least-used move. Only called
+ * for a Pokemon the stats show actually runs the move, so the set stays legal.
+ */
+function withRequiredMove(member: TeamMember, profile: FormatProfile, moveId: string, explanation: string): TeamMember {
+  if (setHasMove(member.set, moveId)) return member;
+
+  const move = Dex.forGen(profile.gen).moves.get(moveId);
+  if (!move.exists || !member.stats.moves[moveId]) return member;
+
+  const moves = [...member.set.moves];
+  const weakest = moves.reduce(
+    (worst, candidate, index) => (member.stats.moves[toId(candidate)] ?? 0) < worst.weight
+      ? {index, weight: member.stats.moves[toId(candidate)] ?? 0}
+      : worst,
+    {index: 0, weight: Number.POSITIVE_INFINITY}
+  );
+  moves[weakest.index] = move.name;
+
+  return {
+    ...member,
+    set: {...member.set, moves, roles: detectRolesForMoves(member.stats, profile, moves.map(toId))},
+    explanation: [...member.explanation, explanation]
+  };
+}
+
+/** Guarantees the archetype's defining move exists on the finished team. */
+function enforceTrickRoom(members: TeamMember[], profile: FormatProfile): TeamMember[] {
+  if (members.some(member => setHasMove(member.set, trickRoomId))) return members;
+
+  const setter = members
+    .filter(member => moveShare(member.stats, trickRoomId) > 0)
+    .sort((a, b) => moveShare(b.stats, trickRoomId) - moveShare(a.stats, trickRoomId))[0];
+  if (!setter) return members;
+
+  return members.map(member => member === setter
+    ? withRequiredMove(member, profile, trickRoomId, 'Given Trick Room, which the team needs')
+    : member);
+}
+
 function memberFromStats(
   stats: PokemonStats,
   members: TeamMember[],
   profile: FormatProfile,
-  explanation: string[]
+  explanation: string[],
+  archetype: Archetype = 'balanced'
 ): TeamMember {
-  const [set] = buildSetCandidates(stats, profile, {
+  const candidates = buildSetCandidates(stats, profile, {
     existingRoles: existingRoleTotals(members),
     itemClause: profile.itemClause,
-    usedItems: existingUsedItems(members)
+    usedItems: existingUsedItems(members),
+    archetype
   });
 
-  return {stats, set, explanation};
+  return {stats, set: chooseSet(candidates, archetype), explanation};
 }
 
 function normalizeLockedMembers(lockedMembers: TeamMember[] | undefined): TeamMember[] {
@@ -156,7 +230,7 @@ function uniqueInitialMembers(
     const baseSpecies = speciesKey(stats, profile);
     if (selectedSpecies.has(baseSpecies)) continue;
 
-    const member = memberFromStats(stats, members, profile, ['Seeded by user']);
+    const member = memberFromStats(stats, members, profile, ['Seeded by user'], options.archetype);
     if (!canAddMember(members, member, profile)) continue;
 
     selected.add(id);
@@ -204,7 +278,7 @@ function weatherArchetypeScore(stats: PokemonStats, members: TeamMember[]): numb
 function roleScoreForArchetype(
   stats: PokemonStats,
   profile: FormatProfile,
-  archetype: GenerateOptions['archetype'],
+  archetype: Archetype,
   members: TeamMember[]
 ): number {
   const roles = detectRoles(stats, profile);
@@ -214,7 +288,7 @@ function roleScoreForArchetype(
   if (archetype === 'trick-room') {
     return (stats.moves.trickroom ? 4 : 0) + trickRoomComplementScore(stats, profile) + roles.speedControl * 2 + roles.positioning + roles.spreadPressure;
   }
-  return 0;
+  return memberArchetypeFit(stats, profile, archetype, roles);
 }
 
 /**
@@ -234,7 +308,7 @@ function candidatePool(
   selectedSpecies: Set<string>,
   novelty: number,
   randomSeed: number | undefined,
-  archetype: GenerateOptions['archetype'],
+  archetype: Archetype,
   members: TeamMember[]
 ): PokemonStats[] {
   return withUsageFloor(dataset, sortedPokemon(dataset, novelty, randomSeed)
@@ -269,6 +343,7 @@ function bestArchetypeCandidate(
   bannedIds: Set<string>,
   predicate: (stats: PokemonStats) => boolean,
   explanation: string,
+  archetype: Archetype,
   novelty = 0,
   rng: Rng | null = null
 ): TeamMember | null {
@@ -284,7 +359,7 @@ function bestArchetypeCandidate(
   );
 
   for (const candidate of stats) {
-    const member = memberFromStats(candidate, members, profile, [explanation]);
+    const member = memberFromStats(candidate, members, profile, [explanation], archetype);
     if (canAddMember(members, member, profile)) return member;
   }
 
@@ -383,7 +458,7 @@ function withArchetypeAnchors(
   members: TeamMember[],
   bannedIds: Set<string>,
   targetSize: number,
-  archetype: GenerateOptions['archetype'],
+  archetype: Archetype,
   novelty: number,
   rng: Rng | null
 ): TeamMember[] {
@@ -402,10 +477,10 @@ function withArchetypeAnchors(
       const label = conditionLabel(plan.condition);
 
       if (plan.setter) {
-        add(memberFromStats(plan.setter, next, profile, [`Added as ${label} setter`]));
+        add(memberFromStats(plan.setter, next, profile, [`Added as ${label} setter`], archetype));
       }
       if (plan.abuser) {
-        add(memberFromStats(plan.abuser, next, profile, [`Added to abuse ${label}`]));
+        add(memberFromStats(plan.abuser, next, profile, [`Added to abuse ${label}`], archetype));
       }
 
       add(bestArchetypeCandidate(
@@ -416,14 +491,53 @@ function withArchetypeAnchors(
         stats => conditionShare(abusedConditions(stats), plan.condition) > 0
           && bestConditionShare(settableConditions(stats), plan.condition) === 0,
         `Added to abuse ${label}`,
+        archetype,
         novelty,
         rng
       ));
     }
   }
 
+  if (archetype === 'hyper-offense') {
+    // Hyper offense opens by putting hazards down with a fast, expendable lead,
+    // then wins with setup sweepers that the hazards enable.
+    add(bestArchetypeCandidate(
+      dataset,
+      profile,
+      next,
+      bannedIds,
+      stats => detectRoles(stats, profile).hazardSetter > 0 && statAxes(stats, profile).speed >= 0.6,
+      'Added as fast hazard lead',
+      archetype,
+      novelty,
+      rng
+    ));
+    add(bestArchetypeCandidate(
+      dataset,
+      profile,
+      next,
+      bannedIds,
+      stats => detectRoles(stats, profile).setup > 0 && statAxes(stats, profile).offense >= 0.7,
+      'Added as setup sweeper',
+      archetype,
+      novelty,
+      rng
+    ));
+  }
+
   if (archetype === 'trick-room') {
-    add(bestArchetypeCandidate(dataset, profile, next, bannedIds, stats => Boolean(stats.moves.trickroom), 'Added as Trick Room setter', novelty, rng));
+    const setter = bestArchetypeCandidate(
+      dataset,
+      profile,
+      next,
+      bannedIds,
+      stats => moveShare(stats, trickRoomId) >= minTrickRoomShare,
+      'Added as Trick Room setter',
+      archetype,
+      novelty,
+      rng
+    );
+    add(setter && withRequiredMove(setter, profile, trickRoomId, 'Set Trick Room for the team'));
     add(bestArchetypeCandidate(
       dataset,
       profile,
@@ -431,6 +545,7 @@ function withArchetypeAnchors(
       bannedIds,
       stats => !stats.moves.trickroom && trickRoomComplementScore(stats, profile) >= 2,
       'Added as slow Trick Room partner',
+      archetype,
       novelty,
       rng
     ));
@@ -444,7 +559,7 @@ function advanceBeams(
   dataset: StatsDataset,
   profile: FormatProfile,
   targetSize: number,
-  archetype: GenerateOptions['archetype'],
+  archetype: Archetype,
   novelty: number,
   randomSeed: number | undefined,
   bannedIds: Set<string>,
@@ -459,7 +574,7 @@ function advanceBeams(
     for (const stats of candidatePool(dataset, profile, selectedIds, speciesKeys, novelty, randomSeed, archetype, beam.members)) {
       const member = memberFromStats(stats, beam.members, profile, [
         `Added from usage rank with ${stats.usage.toFixed(1)}% usage`
-      ]);
+      ], archetype);
       if (!canAddMember(beam.members, member, profile)) continue;
 
       const members = [...beam.members, member];
@@ -527,7 +642,9 @@ export function generateTeam(dataset: StatsDataset, formatId: string, options: G
     beams = advanced;
   }
 
-  const members = applyLead(sampleBeams(beams, 1, novelty, rng)[0]?.members ?? [], dataset, profile);
+  const selected = sampleBeams(beams, 1, novelty, rng)[0]?.members ?? [];
+  const withArchetypeMoves = options.archetype === 'trick-room' ? enforceTrickRoom(selected, profile) : selected;
+  const members = applyLead(withArchetypeMoves, dataset, profile);
   const score = scoreTeam(members, dataset, profile, options.archetype);
   const importable = formatTeam({members});
 

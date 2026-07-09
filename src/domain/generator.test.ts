@@ -2,8 +2,10 @@ import {describe, expect, it} from 'vitest';
 import {makeDataset, makePokemon} from '../test/fixtures';
 import {inferFormatProfile} from './formatProfile';
 import {generateTeam} from './generator';
+import {toId} from './id';
 import {attachLeads} from './leads';
 import {buildSetCandidates} from './sets';
+import {scoreTeam} from './scoring';
 import {isEligible} from './usageProfile';
 import {abuserCount, committedCondition, memberSetConditions, setterCount} from './weather';
 import type {PokemonStats, TeamMember} from './types';
@@ -434,6 +436,147 @@ describe('generateTeam', () => {
 
     const team = generateTeam(dataset, 'gen91v1', {seeds: [], archetype: 'balanced', novelty: 0});
     expect(team.members.every(member => member.lead === undefined)).toBe(true);
+  });
+
+  it('builds visibly different teams for stall and hyper offense', () => {
+    // Six of each, so neither archetype is forced to take the other's Pokemon.
+    // Their movesets vary the way real ones do, so the role score is not capped
+    // by six Pokemon that all do the same job.
+    const wallSets: Record<string, Record<string, number>> = {
+      Blissey: {softboiled: 100, toxic: 90, teleport: 80, seismictoss: 70},
+      Skarmory: {roost: 100, spikes: 90, bodypress: 80, whirlwind: 70},
+      Toxapex: {recover: 100, toxic: 90, haze: 80, surf: 70},
+      Dondozo: {rest: 100, curse: 90, waterfall: 80, sleeptalk: 70},
+      Corviknight: {roost: 100, defog: 90, bravebird: 80, uturn: 70},
+      Alomomola: {wish: 100, protect: 90, scald: 80, flipturn: 70}
+    };
+    const sweeperSets: Record<string, Record<string, number>> = {
+      Dragapult: {dragondance: 100, shadowball: 90, dracometeor: 80, uturn: 70},
+      Weavile: {swordsdance: 100, knockoff: 90, iceshard: 80, closecombat: 70},
+      'Iron Valiant': {swordsdance: 100, closecombat: 90, moonblast: 80, knockoff: 70},
+      Barraskewda: {liquidation: 100, closecombat: 90, aquajet: 80, flipturn: 70},
+      Cinderace: {pyroball: 100, suckerpunch: 90, uturn: 80, courtchange: 70},
+      Meowscarada: {flowertrick: 100, knockoff: 90, suckerpunch: 80, uturn: 70}
+    };
+    const walls = Object.keys(wallSets);
+    const sweepers = Object.keys(sweeperSets);
+    const dataset = makeDataset([
+      ...walls.map(name => ouPokemon({id: toId(name), name, usage: 20, moves: wallSets[name]})),
+      ...sweepers.map(name => ouPokemon({id: toId(name), name, usage: 20, moves: sweeperSets[name]}))
+    ]);
+
+    const stall = generateTeam(dataset, 'gen9ou', {seeds: [], archetype: 'stall', novelty: 0}).members.map(m => m.stats.id);
+    const hyperOffense = generateTeam(dataset, 'gen9ou', {seeds: [], archetype: 'hyper-offense', novelty: 0}).members.map(m => m.stats.id);
+
+    const wallIds = walls.map(toId);
+    const countWalls = (team: string[]) => team.filter(id => wallIds.includes(id)).length;
+
+    // Each archetype leans hard toward its own Pokemon without being forced to
+    // be pure: a stall team may still carry a win condition.
+    expect(countWalls(stall)).toBeGreaterThanOrEqual(4);
+    expect(countWalls(hyperOffense)).toBeLessThanOrEqual(2);
+    expect(countWalls(stall)).toBeGreaterThan(countWalls(hyperOffense));
+    expect(stall).toEqual(expect.arrayContaining(['blissey']));
+    expect(hyperOffense).toEqual(expect.arrayContaining(['weavile']));
+  });
+
+  it('always gives a trick-room team a Pokemon that sets Trick Room', () => {
+    const dataset = makeDataset([
+      ouPokemon({id: 'ursaluna', name: 'Ursaluna', usage: 40, moves: {facade: 100, headlongrush: 90, protect: 80, trickroom: 30}}),
+      ouPokemon({id: 'ironhands', name: 'Iron Hands', usage: 35, abilities: {quarkdrive: 100}, moves: {drainpunch: 100, fakeout: 90, closecombat: 80, wildcharge: 70}}),
+      ouPokemon({id: 'fluttermane', name: 'Flutter Mane', usage: 45, abilities: {protosynthesis: 100}, moves: {moonblast: 100, shadowball: 90, protect: 80, dazzlinggleam: 70}}),
+      ouPokemon({id: 'incineroar', name: 'Incineroar', usage: 38, moves: {fakeout: 100, knockoff: 90, partingshot: 80, flareblitz: 70}}),
+      ouPokemon({id: 'rillaboom', name: 'Rillaboom', usage: 30, abilities: {grassysurge: 100}, moves: {woodhammer: 100, grassyglide: 90, fakeout: 80, uturn: 70}}),
+      ouPokemon({id: 'amoonguss', name: 'Amoonguss', usage: 28, moves: {spore: 100, ragepowder: 90, protect: 80, sludgebomb: 70}})
+    ]);
+
+    for (const randomSeed of [1, 2, 3, 4, 5]) {
+      const team = generateTeam(dataset, 'gen9vgc2025regg', {seeds: [], archetype: 'trick-room', novelty: 0.55, randomSeed});
+      const setters = team.members.filter(member => member.set.moves.some(move => toId(move) === 'trickroom'));
+
+      expect(setters.length).toBeGreaterThanOrEqual(1);
+      expect(team.score.warnings).not.toContain('No Pokemon on this team can set Trick Room');
+    }
+  });
+
+  it('warns when a trick-room team truly has no Pokemon that can set it', () => {
+    const dataset = makeDataset([
+      ouPokemon({id: 'kingambit', name: 'Kingambit', usage: 30, moves: {kowtowcleave: 100, suckerpunch: 90}}),
+      ouPokemon({id: 'dragapult', name: 'Dragapult', usage: 28, moves: {dracometeor: 100, shadowball: 90}}),
+      ouPokemon({id: 'greattusk', name: 'Great Tusk', usage: 26, moves: {headlongrush: 100, rapidspin: 90}})
+    ]);
+
+    const team = generateTeam(dataset, 'gen91v1', {seeds: [], archetype: 'trick-room', novelty: 0});
+    expect(team.score.warnings).toContain('No Pokemon on this team can set Trick Room');
+  });
+
+  it('builds a different set for the same Pokemon depending on the archetype', () => {
+    const gliscor = ouPokemon({
+      id: 'gliscor',
+      name: 'Gliscor',
+      usage: 30,
+      abilities: {poisonheal: 100},
+      items: {toxicorb: 60, leftovers: 25, lifeorb: 15},
+      moves: {swordsdance: 100, earthquake: 95, knockoff: 90, protect: 85, toxic: 80, spikes: 75, roost: 70}
+    });
+    const dataset = makeDataset([
+      gliscor,
+      ouPokemon({id: 'blissey', name: 'Blissey', usage: 20, moves: {softboiled: 100, toxic: 90}}),
+      ouPokemon({id: 'weavile', name: 'Weavile', usage: 20, moves: {swordsdance: 100, knockoff: 90}})
+    ]);
+
+    const setFor = (archetype: 'stall' | 'hyper-offense') => generateTeam(dataset, 'gen91v1', {
+      seeds: ['Gliscor'],
+      archetype,
+      novelty: 0
+    }).members.find(member => member.stats.id === 'gliscor')!.set;
+
+    const stallSet = setFor('stall');
+    const offenseSet = setFor('hyper-offense');
+
+    expect(stallSet.moves).not.toEqual(offenseSet.moves);
+    expect(offenseSet.moves).toContain('Swords Dance');
+    expect(stallSet.moves).toContain('Toxic');
+  });
+
+  it('never builds a set without a damaging move', () => {
+    const utilityMon = ouPokemon({
+      id: 'gliscor',
+      name: 'Gliscor',
+      usage: 30,
+      abilities: {poisonheal: 100},
+      items: {toxicorb: 100},
+      // Every utility move outweighs the single attack.
+      moves: {spikes: 100, stealthrock: 95, toxicspikes: 90, swordsdance: 85, earthquake: 10}
+    });
+    const dataset = makeDataset([
+      utilityMon,
+      ouPokemon({id: 'blissey', name: 'Blissey', usage: 20, moves: {softboiled: 100, toxic: 90}}),
+      ouPokemon({id: 'weavile', name: 'Weavile', usage: 20, moves: {swordsdance: 100, knockoff: 90}})
+    ]);
+
+    const set = generateTeam(dataset, 'gen91v1', {seeds: ['Gliscor'], archetype: 'hyper-offense', novelty: 0})
+      .members.find(member => member.stats.id === 'gliscor')!.set;
+
+    expect(set.moves).toContain('Earthquake');
+    expect(set.moves.filter(move => ['Spikes', 'Stealth Rock', 'Toxic Spikes'].includes(move)).length).toBeLessThanOrEqual(2);
+  });
+
+  it('scores a wall team above a sweeper team for stall, and the reverse for hyper offense', () => {
+    const dataset = makeDataset([
+      ouPokemon({id: 'blissey', name: 'Blissey', usage: 20, moves: {softboiled: 100, toxic: 90}}),
+      ouPokemon({id: 'skarmory', name: 'Skarmory', usage: 20, moves: {roost: 100, spikes: 90}}),
+      ouPokemon({id: 'weavile', name: 'Weavile', usage: 20, moves: {swordsdance: 100, knockoff: 90}}),
+      ouPokemon({id: 'dragapult', name: 'Dragapult', usage: 20, moves: {dragondance: 100, shadowball: 90}})
+    ]);
+    const profile = inferFormatProfile('gen9ou');
+    const walls = ['blissey', 'skarmory'].map(id => lockedMember(dataset.pokemonById[id]));
+    const sweepers = ['weavile', 'dragapult'].map(id => lockedMember(dataset.pokemonById[id]));
+
+    expect(scoreTeam(walls, dataset, profile, 'stall').archetype)
+      .toBeGreaterThan(scoreTeam(sweepers, dataset, profile, 'stall').archetype);
+    expect(scoreTeam(sweepers, dataset, profile, 'hyper-offense').archetype)
+      .toBeGreaterThan(scoreTeam(walls, dataset, profile, 'hyper-offense').archetype);
   });
 
   it('does not force one Pokemon into every team of an open format', () => {

@@ -1,4 +1,5 @@
 import {Dex} from '@pkmn/dex';
+import {archetypeProfile, statTargetScore} from './archetype';
 import {scoreSetForTeamContext} from './sets';
 import {toId} from './id';
 import {unsupportedTerrainSeedWarnings} from './fieldSupport';
@@ -15,8 +16,8 @@ import {
   setterCount
 } from './weather';
 import type {
+  Archetype,
   FormatProfile,
-  GenerateOptions,
   GeneratedTeam,
   RoleScores,
   ScoreBreakdown,
@@ -25,8 +26,6 @@ import type {
   TeamMember,
   ThreatCoverage
 } from './types';
-
-type Archetype = GenerateOptions['archetype'];
 
 const roleKeys = [
   'physicalBreaker',
@@ -164,15 +163,24 @@ function roleTotals(members: TeamMember[]): RoleScores {
   return totals;
 }
 
+/**
+ * Normalized against the best score these weights could award, rather than
+ * clamped at a fixed ceiling. A hard clamp saturated for every team, so the
+ * largest term in the breakdown carried no information at all.
+ */
 function roleScore(members: TeamMember[], profile: FormatProfile): number {
   const totals = roleTotals(members);
   const cap = profile.battleStyle === 'doubles' ? 2 : 1.5;
-  const score = roleKeys.reduce((sum, role) => {
-    const weight = profile.roleWeights[role];
-    return sum + Math.min(totals[role], cap) * weight;
-  }, 0);
+  let score = 0;
+  let best = 0;
 
-  return clamp(score, 0, 10);
+  for (const role of roleKeys) {
+    const weight = profile.roleWeights[role];
+    score += Math.min(totals[role], cap) * weight;
+    best += cap * weight;
+  }
+
+  return best > 0 ? clamp((score / best) * 10, 0, 10) : 0;
 }
 
 function duplicateRoleScore(members: TeamMember[], profile: FormatProfile): number {
@@ -278,42 +286,34 @@ function weatherArchetypeFit(members: TeamMember[]): number {
     - offConditionAbusers * 1.2;
 }
 
+/**
+ * Signed and large enough to matter: a team built against its archetype has to
+ * be able to score worse than a team built for it, or the choice is cosmetic.
+ */
 function archetypeScore(members: TeamMember[], profile: FormatProfile, archetype: Archetype): number {
   if (archetype === 'balanced') return 0;
 
   const totals = roleTotals(members);
   const teamSize = Math.max(members.length, 1);
-  const breakerPressure = totals.physicalBreaker + totals.specialBreaker;
-  let score = 0;
 
-  switch (archetype) {
-    case 'offense':
-      score = breakerPressure + totals.cleaner + totals.setup + totals.offensivePivot * 0.7;
-      break;
-    case 'bulky-offense':
-      score = breakerPressure * 0.8 + totals.defensivePivot + totals.offensivePivot + totals.hazardRemoval * 0.5;
-      break;
-    case 'stall':
-      score = totals.defensivePivot * 1.4 + totals.support + totals.status + totals.hazardRemoval + totals.hazardPreservation;
-      break;
-    case 'weather':
-      score = weatherArchetypeFit(members);
-      break;
-    case 'trick-room': {
-      const slowComplement = members.reduce((sum, member) => sum + trickRoomSlowComplement(member, profile), 0);
-      score = totals.speedControl * 1.3
-        + totals.positioning
-        + totals.spreadPressure * (profile.battleStyle === 'doubles' ? 1 : 0.5)
-        + slowComplement * 1.8
-        - trickRoomSupportPenalty(members, profile);
-      break;
-    }
+  if (archetype === 'weather') {
+    return clamp((weatherArchetypeFit(members) / teamSize) * 2, 0, 3);
   }
 
-  return clamp((score / teamSize) * 2, 0, 3);
+  if (archetype === 'trick-room') {
+    const slowComplement = members.reduce((sum, member) => sum + trickRoomSlowComplement(member, profile), 0);
+    const score = totals.speedControl * 1.3
+      + totals.positioning
+      + totals.spreadPressure * (profile.battleStyle === 'doubles' ? 1 : 0.5)
+      + slowComplement * 1.8
+      - trickRoomSupportPenalty(members, profile);
+    return clamp((score / teamSize) * 2, 0, 3);
+  }
+
+  return clamp(statTargetScore(members, profile, archetype), -5, 2.5);
 }
 
-function warningList(members: TeamMember[], profile: FormatProfile): string[] {
+function warningList(members: TeamMember[], profile: FormatProfile, archetype: Archetype): string[] {
   const warnings = [...profile.warnings];
   const ids = new Set<string>();
 
@@ -332,15 +332,22 @@ function warningList(members: TeamMember[], profile: FormatProfile): string[] {
     warnings.push('Trick Room needs slow attackers or bulky partners to capitalize on the speed reversal');
   }
 
+  if (archetype === 'trick-room' && members.length && !members.some(memberHasTrickRoom)) {
+    warnings.push('No Pokemon on this team can set Trick Room');
+  }
+
   return warnings;
 }
 
 export function scoreTeam(
   members: TeamMember[],
   dataset: StatsDataset,
-  profile: FormatProfile,
+  baseProfile: FormatProfile,
   archetype: Archetype = 'balanced'
 ): ScoreBreakdown {
+  // The archetype reshapes what a good team is, so it has to reach the role
+  // weights themselves rather than only adding a bonus on top of them.
+  const profile = archetypeProfile(baseProfile, archetype);
   const scores = {
     usage: usageScore(members, dataset),
     setConfidence: setConfidenceScore(members),
@@ -368,7 +375,7 @@ export function scoreTeam(
     duplicateRoles: roundScore(scores.duplicateRoles),
     archetype: roundScore(scores.archetype),
     leads: roundScore(scores.leads),
-    warnings: warningList(members, profile)
+    warnings: warningList(members, profile, archetype)
   };
 }
 

@@ -1,13 +1,36 @@
 import {Dex} from '@pkmn/dex';
+import {abilityBias, itemBias, roleAffinity, spreadBias} from './archetype';
 import {toId} from './id';
 import {detectRolesForMoves} from './roles';
-import type {AnalysisSetTemplate, FormatProfile, PokemonStats, RoleScores, SetCandidate, WeightedTable} from './types';
+import type {Archetype, AnalysisSetTemplate, FormatProfile, PokemonStats, RoleScores, SetCandidate, WeightedTable} from './types';
+
+/** Roles a single move can plug for a team that lacks them. */
+const gapRoles: Array<keyof RoleScores> = [
+  'hazardSetter',
+  'hazardRemoval',
+  'speedControl',
+  'offensivePivot',
+  'status',
+  'itemDisruption'
+];
 
 interface TeamContext {
   existingRoles?: Partial<RoleScores>;
   itemClause?: boolean;
   usedItems?: Set<string>;
+  archetype?: Archetype;
 }
+
+/**
+ * How far a bias may move a choice away from what the format actually plays.
+ * Usage share stays the base term so an archetype nudges the pick rather than
+ * inventing a set nobody runs.
+ */
+const biasWeight = 0.45;
+const minimumShare = 0.04;
+const minimumAttackingMoves = 1;
+const maximumHazardMoves = 2;
+const hazardMoveIds = new Set(['stealthrock', 'spikes', 'toxicspikes', 'stickyweb']);
 
 interface ContextMember {
   roles: RoleScores;
@@ -28,6 +51,41 @@ function topEntries(table: WeightedTable, limit = 1): Array<[string, number]> {
   return Object.entries(table)
     .sort(([, a], [, b]) => b - a)
     .slice(0, limit);
+}
+
+/**
+ * Picks the entry with the best usage share once the archetype's bias is added.
+ * Entries the format barely runs are ignored unless nothing else qualifies, so
+ * a bias can reorder real options but cannot conjure an unplayed one.
+ */
+function pickBiased(
+  table: WeightedTable,
+  archetype: Archetype | undefined,
+  bias: (id: string, archetype: Archetype) => number,
+  allow: (id: string) => boolean = () => true
+): [string, number] {
+  const total = tableTotal(table);
+  const entries = Object.entries(table).filter(([id]) => allow(id));
+  if (!entries.length || total <= 0) return ['', 0];
+
+  const playable = entries.filter(([, weight]) => weight / total >= minimumShare);
+  const pool = playable.length ? playable : entries;
+  if (!archetype) return pool.sort(([, a], [, b]) => b - a)[0];
+
+  return pool.reduce((best, entry) => {
+    const score = (weight: number, id: string) => weight / total + bias(id, archetype) * biasWeight;
+    return score(entry[1], entry[0]) > score(best[1], best[0]) ? entry : best;
+  }, pool[0]);
+}
+
+function parseSpreadEvs(spreadId: string): number[] {
+  const [, evText] = spreadId.split(':');
+  const evs = evText?.split('/').map(Number) ?? [];
+  return evs.length === 6 && evs.every(Number.isFinite) ? evs : [];
+}
+
+function pickSpread(table: WeightedTable, archetype: Archetype | undefined): [string, number] {
+  return pickBiased(table, archetype, (id, current) => spreadBias(parseSpreadEvs(id), current));
 }
 
 function titleCase(id: string): string {
@@ -170,7 +228,26 @@ function adjustedMoveWeight(
     weight -= moveTotal * roles.speedControl * profile.roleWeights.duplicateSpeedControlPenalty * 0.25;
   }
 
+  if (context?.archetype) {
+    weight += moveTotal * roleAffinity(roles, context.archetype) * 0.2;
+  }
+
+  weight += moveTotal * teamGapBonus(roles, profile, context) * 0.12;
+
   return weight;
+}
+
+/**
+ * Favours moves that cover a role the rest of the team does not have yet, so a
+ * set is built for the team it joins rather than in isolation.
+ */
+function teamGapBonus(roles: RoleScores, profile: FormatProfile, context?: TeamContext): number {
+  if (!context?.existingRoles) return 0;
+
+  return gapRoles.reduce((sum, role) => {
+    if (roles[role] <= 0 || existingRoleScore(context, role) > 0) return sum;
+    return sum + roles[role] * profile.roleWeights[role];
+  }, 0);
 }
 
 function highestAvailableMove(stats: PokemonStats, predicate: (moveId: string) => boolean): string | undefined {
@@ -195,7 +272,7 @@ function replacementIndexForBodyPress(selected: string[], profile: FormatProfile
 }
 
 function repairMoveSynergy(stats: PokemonStats, profile: FormatProfile, selectedItemId: string, selected: string[]): string[] {
-  const next = [...selected];
+  let next = [...selected];
   const itemId = toId(selectedItemId);
 
   if (next.includes('bodypress') && itemId !== 'choiceband') {
@@ -204,6 +281,58 @@ function repairMoveSynergy(stats: PokemonStats, profile: FormatProfile, selected
       const replaceAt = replacementIndexForBodyPress(next, profile);
       if (replaceAt >= 0) next[replaceAt] = defenseSetup;
     }
+  }
+
+  next = cappedHazardMoves(stats, profile, next);
+  return ensureAttackingMoves(stats, profile, next);
+}
+
+function swapWeakest(
+  stats: PokemonStats,
+  selected: string[],
+  removable: (moveId: string) => boolean,
+  replacement: string | undefined
+): string[] {
+  if (!replacement || selected.includes(replacement)) return selected;
+
+  const candidates = selected
+    .map((moveId, index) => ({moveId, index}))
+    .filter(entry => removable(entry.moveId))
+    .sort((a, b) => (stats.moves[a.moveId] ?? 0) - (stats.moves[b.moveId] ?? 0));
+  if (!candidates.length) return selected;
+
+  const next = [...selected];
+  next[candidates[0].index] = replacement;
+  return next;
+}
+
+/**
+ * A set with no way to deal damage is never right, however well its utility
+ * moves score. Boosting hazard and setup roles for an archetype can otherwise
+ * fill all four slots with status moves.
+ */
+function ensureAttackingMoves(stats: PokemonStats, profile: FormatProfile, selected: string[]): string[] {
+  let next = [...selected];
+
+  while (next.filter(moveId => isDamagingMove(profile, moveId)).length < minimumAttackingMoves) {
+    const attack = highestAvailableMove(stats, moveId => isDamagingMove(profile, moveId) && !next.includes(moveId));
+    const repaired = swapWeakest(stats, next, moveId => !isDamagingMove(profile, moveId), attack);
+    if (repaired === next) break;
+    next = repaired;
+  }
+
+  return next;
+}
+
+/** Three entry hazards on one Pokemon is a stats artefact, not a set. */
+function cappedHazardMoves(stats: PokemonStats, profile: FormatProfile, selected: string[]): string[] {
+  let next = [...selected];
+
+  while (next.filter(moveId => hazardMoveIds.has(moveId)).length > maximumHazardMoves) {
+    const attack = highestAvailableMove(stats, moveId => isDamagingMove(profile, moveId) && !next.includes(moveId));
+    const repaired = swapWeakest(stats, next, moveId => hazardMoveIds.has(moveId), attack);
+    if (repaired === next) break;
+    next = repaired;
   }
 
   return next;
@@ -279,16 +408,16 @@ export function buildSetCandidates(stats: PokemonStats, profile: FormatProfile, 
 
   if (analysisCandidates.length) return analysisCandidates;
 
-  const [[abilityId, abilityWeight] = ['', 0]] = topEntries(stats.abilities);
-  const itemEntries = topEntries(stats.items, Math.max(1, Object.keys(stats.items).length));
+  const archetype = context?.archetype;
+  const [abilityId, abilityWeight] = pickBiased(stats.abilities, archetype, abilityBias);
   const usedItemIds = new Set([...(context?.usedItems ?? new Set<string>())].map(toId));
-  const [selectedItemId, itemWeight] = itemEntries.find(([candidateItemId]) => {
+  const [selectedItemId, itemWeight] = pickBiased(stats.items, archetype, itemBias, candidateItemId => {
     const legalItem = legalItemId(profile, candidateItemId);
     if (!legalItem) return true;
     const display = dexDisplay(profile, 'item', legalItem);
     return !context?.itemClause || (!usedItemIds.has(toId(legalItem)) && !usedItemIds.has(toId(display)));
-  }) ?? ['', 0];
-  const [[spreadId, spreadWeight] = ['', 0]] = topEntries(stats.spreads);
+  });
+  const [spreadId, spreadWeight] = pickSpread(stats.spreads, archetype);
   const [[teraTypeId, teraTypeWeight] = ['', 0]] = topEntries(stats.teraTypes);
   const ability = legalAbilityId(profile, abilityId);
   const item = legalItemId(profile, selectedItemId);

@@ -54,6 +54,28 @@ describe('scoreTeam', () => {
     expect(selectedFit).toBeGreaterThan(duplicateFit);
   });
 
+  it('does not saturate the role score, so it can tell teams apart', () => {
+    const support = makePokemon({id: 'blissey', name: 'Blissey', moves: {softboiled: 100, toxic: 90, teleport: 80, seismictoss: 70}});
+    const attacker = makePokemon({id: 'weavile', name: 'Weavile', moves: {knockoff: 100, iceshard: 90, closecombat: 80, swordsdance: 70}});
+    const dataset = makeDataset([support, attacker]);
+    const profile = inferFormatProfile('gen9ou');
+
+    const roles = scoreTeam([member(support), member(attacker)], dataset, profile).roles;
+    expect(roles).toBeGreaterThan(0);
+    expect(roles).toBeLessThan(10);
+  });
+
+  it('shapes the role score by archetype rather than scoring every team alike', () => {
+    const wall = makePokemon({id: 'blissey', name: 'Blissey', moves: {softboiled: 100, toxic: 90, teleport: 80}});
+    const sweeper = makePokemon({id: 'weavile', name: 'Weavile', moves: {swordsdance: 100, knockoff: 90, iceshard: 80}});
+    const dataset = makeDataset([wall, sweeper]);
+    const profile = inferFormatProfile('gen9ou');
+    const team = [member(wall), member(sweeper)];
+
+    expect(scoreTeam(team, dataset, profile, 'stall').roles)
+      .not.toBe(scoreTeam(team, dataset, profile, 'hyper-offense').roles);
+  });
+
   it('scores teammate synergy by co-occurrence rate, not by raw weight', () => {
     const commonA = makePokemon({id: 'common-a', name: 'Common A', usage: 80, rawCount: 8000, teammates: {'common-b': 4000}});
     const commonB = makePokemon({id: 'common-b', name: 'Common B', usage: 80, rawCount: 8000, teammates: {'common-a': 4000}});

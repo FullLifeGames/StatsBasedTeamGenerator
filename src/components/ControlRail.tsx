@@ -1,4 +1,5 @@
 import {LoaderCircle, Moon, Sun, WandSparkles} from 'lucide-react';
+import {archetypeListings} from '../domain/archetype';
 import type {useGenerator} from '../data/useGenerator';
 
 type GeneratorState = ReturnType<typeof useGenerator>;
@@ -26,14 +27,17 @@ interface ThemeProps {
   onToggleDarkMode: () => void;
 }
 
-const archetypes: Array<{value: GeneratorState['archetype']; label: string}> = [
-  {value: 'balanced', label: 'Balanced'},
-  {value: 'offense', label: 'Offense'},
-  {value: 'bulky-offense', label: 'Bulky offense'},
-  {value: 'stall', label: 'Stall'},
-  {value: 'weather', label: 'Weather'},
-  {value: 'trick-room', label: 'Trick room'}
+const archetypeOrder: Array<GeneratorState['archetype']> = [
+  'balanced',
+  'hyper-offense',
+  'offense',
+  'bulky-offense',
+  'stall',
+  'weather',
+  'trick-room'
 ];
+
+const archetypes = archetypeOrder.map(value => archetypeListings.find(listing => listing.value === value)!);
 
 export function ControlRail({
   index,
@@ -56,6 +60,7 @@ export function ControlRail({
   const months = index?.months ?? [];
   const canGenerate = Boolean(format) && !loading;
   const generateLabel = generating ? 'Generating team' : 'Generate team';
+  const selectedArchetype = archetypes.find(option => option.value === archetype) ?? archetypes[0];
 
   return (
     <aside className="control-rail" aria-busy={loading || undefined} aria-label="Generator controls">
@@ -132,6 +137,7 @@ export function ControlRail({
             </option>
           ))}
         </select>
+        <small className="field__hint">{selectedArchetype.description}</small>
       </label>
 
       <button

@@ -17,6 +17,8 @@ The current deployment is available at https://teamgen.fulllifegames.com/.
 
 - Multi-format Smogon stats browser with month, format, and cutoff selection.
 - Team generation from usage, checks/counters, teammate synergy, and role needs.
+- Seven archetypes, from hyper offense to stall, that reshape which teams score well.
+- Sets adapt to the archetype and the team: moves, item, ability, and EV spread.
 - Weather teams commit to one condition and pair its setter with matching abusers.
 - Standardized formats such as Gen 1 OU lean harder on their near-mandatory usage.
 - Seeded sampling varies teams across rerolls without reaching for niche Pokemon.

@@ -1,5 +1,14 @@
 export type BattleStyle = 'singles' | 'doubles';
 
+export type Archetype =
+  | 'hyper-offense'
+  | 'offense'
+  | 'bulky-offense'
+  | 'balanced'
+  | 'stall'
+  | 'weather'
+  | 'trick-room';
+
 export type WeightedTable = Record<string, number>;
 
 export interface StatsIndex {
@@ -189,7 +198,7 @@ export interface GenerateOptions {
   seeds: string[];
   lockedMembers?: TeamMember[];
   bannedMembers?: string[];
-  archetype: 'balanced' | 'offense' | 'bulky-offense' | 'stall' | 'weather' | 'trick-room';
+  archetype: Archetype;
   novelty: number;
   randomSeed?: number;
 }

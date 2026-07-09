@@ -124,6 +124,13 @@ select {
   cursor: not-allowed;
 }
 
+.field__hint {
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
 .generate-button {
   display: inline-flex;
   align-items: center;
@@ -637,6 +644,7 @@ select {
 }
 
 .app-shell--dark .field,
+.app-shell--dark .field__hint,
 .app-shell--dark .team-board__header p,
 .app-shell--dark .pokemon-card__identity p,
 .app-shell--dark .score-row dt,
