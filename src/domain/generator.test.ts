@@ -2,7 +2,10 @@ import {describe, expect, it} from 'vitest';
 import {makeDataset, makePokemon} from '../test/fixtures';
 import {inferFormatProfile} from './formatProfile';
 import {generateTeam} from './generator';
+import {attachLeads} from './leads';
 import {buildSetCandidates} from './sets';
+import {isEligible} from './usageProfile';
+import {abuserCount, committedCondition, memberSetConditions, setterCount} from './weather';
 import type {PokemonStats, TeamMember} from './types';
 
 function ouPokemon(overrides: Partial<PokemonStats> & Pick<PokemonStats, 'id' | 'name'>): PokemonStats {
@@ -27,6 +30,38 @@ function lockedMember(stats: PokemonStats, format = 'gen9ou'): TeamMember {
     locked: true,
     explanation: ['Locked by user']
   };
+}
+
+function gen1Pokemon(id: string, name: string, usage: number): PokemonStats {
+  return makePokemon({
+    id,
+    name,
+    usage,
+    abilities: {},
+    items: {},
+    spreads: {},
+    moves: {bodyslam: 100, hyperbeam: 90, earthquake: 80, thunderbolt: 70},
+    teraTypes: {}
+  });
+}
+
+/** Mirrors Gen 1 OU: a near-mandatory core, a flex tier, and a niche tail. */
+function standardizedDataset() {
+  return makeDataset([
+    gen1Pokemon('tauros', 'Tauros', 99),
+    gen1Pokemon('chansey', 'Chansey', 92),
+    gen1Pokemon('snorlax', 'Snorlax', 88),
+    gen1Pokemon('exeggutor', 'Exeggutor', 80),
+    gen1Pokemon('alakazam', 'Alakazam', 66),
+    gen1Pokemon('starmie', 'Starmie', 62),
+    gen1Pokemon('rhydon', 'Rhydon', 30),
+    gen1Pokemon('zapdos', 'Zapdos', 22),
+    gen1Pokemon('jynx', 'Jynx', 18),
+    gen1Pokemon('lapras', 'Lapras', 12),
+    gen1Pokemon('gengar', 'Gengar', 8),
+    gen1Pokemon('jolteon', 'Jolteon', 6),
+    gen1Pokemon('sandslash', 'Sandslash', 1)
+  ]);
 }
 
 function gen7Pokemon(overrides: Partial<PokemonStats> & Pick<PokemonStats, 'id' | 'name'>): PokemonStats {
@@ -309,5 +344,113 @@ describe('generateTeam', () => {
     }).members.map(member => member.stats.id).join(','));
 
     expect(new Set(teams).size).toBeGreaterThan(1);
+  });
+
+  it('pairs a weather setter with an abuser of that same weather', () => {
+    const dataset = makeDataset([
+      ouPokemon({id: 'torkoal', name: 'Torkoal', usage: 30, abilities: {drought: 100}, moves: {eruption: 100, lavaplume: 90, bodypress: 80, yawn: 70}}),
+      ouPokemon({id: 'pelipper', name: 'Pelipper', usage: 20, abilities: {drizzle: 100}, moves: {hurricane: 100, uturn: 90, roost: 80, surf: 70}}),
+      ouPokemon({id: 'barraskewda', name: 'Barraskewda', usage: 25, abilities: {swiftswim: 100}, moves: {liquidation: 100, closecombat: 90, flipturn: 80, aquajet: 70}}),
+      ouPokemon({id: 'kingambit', name: 'Kingambit', usage: 28, moves: {kowtowcleave: 100, suckerpunch: 95, ironhead: 80, swordsdance: 70}}),
+      ouPokemon({id: 'gholdengo', name: 'Gholdengo', usage: 27, abilities: {goodasgold: 100}, moves: {makeitrain: 100, shadowball: 95, recover: 60, nastyplot: 50}}),
+      ouPokemon({id: 'dragapult', name: 'Dragapult', usage: 26, moves: {dracometeor: 100, shadowball: 95, uturn: 85, thunderwave: 60}})
+    ]);
+
+    const ids = generateTeam(dataset, 'gen9ou', {seeds: [], archetype: 'weather', novelty: 0}).members.map(member => member.stats.id);
+
+    expect(ids).toEqual(expect.arrayContaining(['pelipper', 'barraskewda']));
+  });
+
+  it('commits to one weather instead of stacking setters', () => {
+    const dataset = makeDataset([
+      ouPokemon({id: 'pelipper', name: 'Pelipper', usage: 20, abilities: {drizzle: 100}, moves: {hurricane: 100, uturn: 90, roost: 80, surf: 70}}),
+      ouPokemon({id: 'barraskewda', name: 'Barraskewda', usage: 19, abilities: {swiftswim: 100}, moves: {liquidation: 100, closecombat: 90, flipturn: 80, aquajet: 70}}),
+      ouPokemon({id: 'torkoal', name: 'Torkoal', usage: 18, abilities: {drought: 100}, moves: {eruption: 100, lavaplume: 90, bodypress: 80, yawn: 70}}),
+      ouPokemon({id: 'venusaur', name: 'Venusaur', usage: 17, abilities: {chlorophyll: 100}, moves: {growth: 100, gigadrain: 90, sludgebomb: 80, weatherball: 70}}),
+      ouPokemon({id: 'tyranitar', name: 'Tyranitar', usage: 16, abilities: {sandstream: 100}, moves: {stoneedge: 100, crunch: 90, earthquake: 80, ironhead: 70}}),
+      ouPokemon({id: 'excadrill', name: 'Excadrill', usage: 15, abilities: {sandrush: 100}, moves: {earthquake: 100, ironhead: 90, rockslide: 80, rapidspin: 70}}),
+      ouPokemon({id: 'kingambit', name: 'Kingambit', usage: 14, moves: {kowtowcleave: 100, suckerpunch: 95, ironhead: 80, swordsdance: 70}}),
+      ouPokemon({id: 'gholdengo', name: 'Gholdengo', usage: 13, abilities: {goodasgold: 100}, moves: {makeitrain: 100, shadowball: 95, recover: 60, nastyplot: 50}})
+    ]);
+
+    const team = generateTeam(dataset, 'gen9ou', {seeds: [], archetype: 'weather', novelty: 0});
+    const condition = committedCondition(team.members);
+
+    expect(condition).not.toBeNull();
+    expect(setterCount(team.members, condition!)).toBe(1);
+    expect(abuserCount(team.members, condition!)).toBeGreaterThan(0);
+    expect(team.members.filter(member => memberSetConditions(member).size > 0)).toHaveLength(1);
+    expect(team.score.warnings).not.toContain(expect.stringContaining('Conflicting weather'));
+  });
+
+  it('keeps the staples of a standardized format while rotating its flex slots', () => {
+    const dataset = standardizedDataset();
+
+    const teams = [1, 2, 3, 4, 5, 6, 7, 8].map(randomSeed => generateTeam(dataset, 'gen1ou', {
+      seeds: [],
+      archetype: 'balanced',
+      novelty: 0.55,
+      randomSeed
+    }).members.map(member => member.stats.id));
+
+    // The near-mandatory Pokemon survives every reroll...
+    expect(teams.every(team => team.includes('tauros'))).toBe(true);
+    // ...but the team as a whole is not frozen.
+    expect(new Set(teams.map(team => [...team].sort().join(','))).size).toBeGreaterThan(1);
+  });
+
+  it('never reaches below the usage floor for a flex slot', () => {
+    const dataset = standardizedDataset();
+
+    const picked = new Set([1, 2, 3, 4, 5, 6, 7, 8].flatMap(randomSeed => generateTeam(dataset, 'gen1ou', {
+      seeds: [],
+      archetype: 'balanced',
+      novelty: 0.55,
+      randomSeed
+    }).members.map(member => member.stats.id)));
+
+    expect(picked.has('sandslash')).toBe(false);
+    expect([...picked].every(id => isEligible(dataset, id))).toBe(true);
+  });
+
+  it('starts the Showdown import with the lead in a pre-team-preview format', () => {
+    const dataset = attachLeads(standardizedDataset(), {starmie: 19.8, alakazam: 15.9, tauros: 6.9});
+
+    const team = generateTeam(dataset, 'gen1ou', {seeds: [], archetype: 'balanced', novelty: 0.55, randomSeed: 3});
+    const lead = team.members[0];
+
+    expect(lead.lead).toBe(true);
+    expect(lead.stats.id).toBe('starmie');
+    expect(team.importable.startsWith('Starmie')).toBe(true);
+    expect(team.members.filter(member => member.lead)).toHaveLength(1);
+  });
+
+  it('does not reorder a format that has team preview', () => {
+    const dataset = makeDataset([
+      ouPokemon({id: 'greattusk', name: 'Great Tusk', usage: 34}),
+      ouPokemon({id: 'kingambit', name: 'Kingambit', usage: 31}),
+      ouPokemon({id: 'gholdengo', name: 'Gholdengo', usage: 28, abilities: {goodasgold: 100}})
+    ]);
+
+    const team = generateTeam(dataset, 'gen91v1', {seeds: [], archetype: 'balanced', novelty: 0});
+    expect(team.members.every(member => member.lead === undefined)).toBe(true);
+  });
+
+  it('does not force one Pokemon into every team of an open format', () => {
+    const dataset = makeDataset(Array.from({length: 14}, (_, index) => ouPokemon({
+      id: `mon${index}`,
+      name: `Mon ${index}`,
+      usage: 30 - index
+    })));
+
+    const counts = new Map<string, number>();
+    const runs = 12;
+    for (let seed = 1; seed <= runs; seed += 1) {
+      for (const member of generateTeam(dataset, 'gen9ou', {seeds: [], archetype: 'balanced', novelty: 0.55, randomSeed: seed}).members) {
+        counts.set(member.stats.id, (counts.get(member.stats.id) ?? 0) + 1);
+      }
+    }
+
+    expect(Math.max(...counts.values())).toBeLessThan(runs);
   });
 });

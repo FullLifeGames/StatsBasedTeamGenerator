@@ -1,9 +1,12 @@
 import {useCallback, useEffect, useMemo, useState} from 'react';
+import {inferFormatProfile} from '../domain/formatProfile';
 import {generateTeam} from '../domain/generator';
 import {toId} from '../domain/id';
+import {attachLeads} from '../domain/leads';
 import type {FormatListing, GenerateOptions, GeneratedTeam, StatsDataset, StatsIndex, TeamMember} from '../domain/types';
 import {
   fetchAnalysisSetTemplates,
+  fetchLeads,
   fetchMonthFormats,
   fetchStatsDataset,
   fetchStatsIndex,
@@ -114,6 +117,21 @@ async function withAnalysisSets(dataset: StatsDataset, format: string, seeds: st
         return [stats.id, next];
       }))
     };
+  } catch {
+    return dataset;
+  }
+}
+
+/**
+ * Leads decide the opening turns before team preview exists, so Gens 1 to 4
+ * score teams on whether they bring a credible lead. Missing leads data must
+ * not block generation.
+ */
+async function withLeads(dataset: StatsDataset, month: string, format: string, cutoff: number): Promise<StatsDataset> {
+  if (!inferFormatProfile(format).usesLeads) return dataset;
+
+  try {
+    return attachLeads(dataset, await fetchLeads(month, format, cutoff));
   } catch {
     return dataset;
   }
@@ -280,7 +298,12 @@ export function useGenerator() {
         [...lockedIds].filter(id => Boolean(loadedDataset.pokemonById[id]))
       );
       const lockedMembers = lockedMembersForDataset(team, validLockedIds, loadedDataset);
-      const enrichedDataset = await withAnalysisSets(loadedDataset, selection.format, seeds, lockedMembers);
+      const enrichedDataset = await withLeads(
+        await withAnalysisSets(loadedDataset, selection.format, seeds, lockedMembers),
+        selection.month,
+        selection.format,
+        selection.cutoff
+      );
       const generatedTeam = generateTeam(enrichedDataset, selection.format, {
         seeds,
         lockedMembers,
@@ -319,7 +342,12 @@ export function useGenerator() {
         .filter(member => toId(member.stats.id) !== normalizedId)
         .filter(member => Boolean(loadedDataset.pokemonById[toId(member.stats.id)]))
         .map(member => ({...member, locked: true}));
-      const enrichedDataset = await withAnalysisSets(loadedDataset, selection.format, seeds, preservedMembers);
+      const enrichedDataset = await withLeads(
+        await withAnalysisSets(loadedDataset, selection.format, seeds, preservedMembers),
+        selection.month,
+        selection.format,
+        selection.cutoff
+      );
       const generatedTeam = generateTeam(enrichedDataset, selection.format, {
         seeds,
         lockedMembers: preservedMembers,

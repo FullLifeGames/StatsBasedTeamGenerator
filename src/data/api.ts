@@ -1,7 +1,9 @@
+import type {LeadUsage} from '../domain/leads';
 import type {AnalysisSetTemplate, FormatListing, StatsDataset, StatsIndex, TeamValidation} from '../domain/types';
 
 const statsDatasetRequests = new Map<string, Promise<StatsDataset>>();
 const analysisSetRequests = new Map<string, Promise<Record<string, AnalysisSetTemplate[]>>>();
+const leadRequests = new Map<string, Promise<LeadUsage>>();
 
 function isMessageBody(body: unknown): body is {message: string} {
   return typeof body === 'object' && body !== null && 'message' in body && typeof body.message === 'string';
@@ -58,6 +60,25 @@ export async function fetchStatsDataset(month: string, format: string, cutoff: n
   return request;
 }
 
+export async function fetchLeads(month: string, format: string, cutoff: number): Promise<LeadUsage> {
+  const path = [
+    '/api/stats/leads',
+    encodeURIComponent(month),
+    encodeURIComponent(format),
+    encodeURIComponent(String(cutoff))
+  ].join('/');
+
+  const cached = leadRequests.get(path);
+  if (cached) return cached;
+
+  const request = fetch(path).then(response => readJson<LeadUsage>(response)).catch(error => {
+    leadRequests.delete(path);
+    throw error;
+  });
+  leadRequests.set(path, request);
+  return request;
+}
+
 export function prefetchStatsDataset(month: string, format: string, cutoff: number): void {
   void fetchStatsDataset(month, format, cutoff).catch(() => {
     // Prefetch is opportunistic; Generate will surface a real error if the user needs this dataset.
@@ -96,4 +117,5 @@ export async function fetchTeamValidation(format: string, importable: string): P
 export function clearApiCaches(): void {
   statsDatasetRequests.clear();
   analysisSetRequests.clear();
+  leadRequests.clear();
 }

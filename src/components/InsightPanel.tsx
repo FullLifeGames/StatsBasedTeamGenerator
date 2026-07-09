@@ -37,6 +37,7 @@ export function InsightPanel({team}: InsightPanelProps) {
     );
   }
 
+  const visibleScores = team.score.leads > 0 ? [...scoreLabels, ['leads', 'Lead'] as const] : scoreLabels;
   const coveredThreats = team.threats.filter(threat => threat.covered).length;
   const hasThreatCoverage = team.threats.length > 0;
   const topSynergy = team.synergy.slice(0, 4);
@@ -51,7 +52,7 @@ export function InsightPanel({team}: InsightPanelProps) {
       <section className="insight-section" aria-labelledby="score-heading">
         <h3 id="score-heading">Score breakdown</h3>
         <dl className="score-grid">
-          {scoreLabels.map(([key, label]) => (
+          {visibleScores.map(([key, label]) => (
             <div className="score-row" key={key}>
               <dt>{label}</dt>
               <dd>{formatScore(team.score[key])}</dd>

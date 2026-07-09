@@ -66,6 +66,34 @@ describe('Smogon stats route validation', () => {
   });
 });
 
+describe('Smogon leads route', () => {
+  it('parses the leads table into lead usage', async () => {
+    const {body, status} = await requestRouter(routerDependencies({
+      fetchText: async () => '| 1    | Jynx               | 22.62514% | 6393   | 17.078% |\n'
+    }), '/api/stats/leads/2026-06/gen1ou/1760');
+
+    expect(status).toBe(200);
+    expect(body).toEqual({jynx: 22.62514});
+  });
+
+  it('rejects a malformed leads request', async () => {
+    const {body, status} = await requestRouter(routerDependencies(), '/api/stats/leads/2026-6/gen1ou/1760');
+
+    expect(status).toBe(400);
+    expect(body.message).toBe('Invalid Smogon leads request');
+  });
+
+  it('reports an upstream leads failure', async () => {
+    const {status} = await requestRouter(routerDependencies({
+      fetchText: async () => {
+        throw new Error('Smogon request failed 404');
+      }
+    }), '/api/stats/leads/2026-06/gen1ou/1760');
+
+    expect(status).toBe(502);
+  });
+});
+
 describe('Smogon set route validation', () => {
   it('accepts a valid format and bounded Pokemon list', () => {
     expect(isValidSetRequest('gen9ou', ['Garchomp', 'Baxcalibur'])).toBe(true);

@@ -50,6 +50,7 @@ export interface PokemonStats {
   teammates: WeightedTable;
   checks: CounterEdge[];
   analysisSets?: AnalysisSetTemplate[];
+  leadUsage?: number;
 }
 
 export interface StatsDataset {
@@ -92,6 +93,7 @@ export interface FormatProfile {
   battleStyle: BattleStyle;
   teamSize: number;
   itemClause: boolean;
+  usesLeads: boolean;
   roleWeights: RoleWeights;
   warnings: string[];
 }
@@ -133,6 +135,8 @@ export interface TeamMember {
   stats: PokemonStats;
   set: SetCandidate;
   locked?: boolean;
+  /** First slot in Gens 1 to 4, where the lead is sent out before team preview. */
+  lead?: boolean;
   explanation: string[];
 }
 
@@ -147,6 +151,7 @@ export interface ScoreBreakdown {
   setToTeamFit: number;
   duplicateRoles: number;
   archetype: number;
+  leads: number;
   warnings: string[];
 }
 

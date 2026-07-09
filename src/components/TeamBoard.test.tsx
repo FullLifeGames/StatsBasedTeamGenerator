@@ -1,6 +1,7 @@
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {generateTeam} from '../domain/generator';
+import {attachLeads} from '../domain/leads';
 import {makeDataset, makePokemon} from '../test/fixtures';
 import {TeamBoard} from './TeamBoard';
 
@@ -18,6 +19,23 @@ const dataset = makeDataset([
 describe('TeamBoard', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('marks the lead so the first slot is not just an unexplained ordering', () => {
+    const leadDataset = attachLeads(dataset, {greattusk: 20});
+    const team = generateTeam(leadDataset, 'gen4ou', {seeds: ['Great Tusk'], archetype: 'balanced', novelty: 0});
+
+    render(<TeamBoard team={team} />);
+
+    expect(screen.getByText('Lead')).toBeInTheDocument();
+  });
+
+  it('does not mark a lead once team preview exists', () => {
+    const team = generateTeam(dataset, 'gen91v1', {seeds: ['Great Tusk'], archetype: 'balanced', novelty: 0});
+
+    render(<TeamBoard team={team} />);
+
+    expect(screen.queryByText('Lead')).not.toBeInTheDocument();
   });
 
   it('copies the generated Showdown import from the team header', async () => {

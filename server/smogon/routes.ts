@@ -1,5 +1,6 @@
 import type {Router} from 'express';
 import express from 'express';
+import {parseLeads} from '../../src/domain/leads';
 import {normalizeChaos} from '../../src/domain/normalize';
 import {readThroughCache} from './cache';
 import {discoverMonthFormats, discoverStatsIndex, fetchText} from './index';
@@ -110,6 +111,30 @@ export function createSmogonRouter(dependencies: SmogonRouterDependencies = defa
     } catch (error) {
       response.status(502).json({
         message: error instanceof Error ? error.message : 'Unable to fetch Smogon chaos data'
+      });
+    }
+  });
+
+  router.get('/stats/leads/:month/:format/:cutoff', async (request, response) => {
+    const {month, format, cutoff} = request.params;
+    const cutoffNumber = Number(cutoff);
+    const url = `https://www.smogon.com/stats/${month}/leads/${format}-${cutoffNumber}.txt`;
+
+    if (!isValidStatsRequest(month, format, cutoff)) {
+      response.status(400).json({message: 'Invalid Smogon leads request'});
+      return;
+    }
+
+    try {
+      const rawText = await dependencies.cache(
+        `leads:${month}:${format}:${cutoffNumber}`,
+        24 * 60 * 60_000,
+        () => dependencies.fetchText(url)
+      );
+      response.json(parseLeads(rawText));
+    } catch (error) {
+      response.status(502).json({
+        message: error instanceof Error ? error.message : 'Unable to fetch Smogon leads data'
       });
     }
   });

@@ -89,6 +89,8 @@ export function inferFormatProfile(formatId: string): FormatProfile {
     battleStyle: doubles ? 'doubles' : 'singles',
     teamSize: id.includes('1v1') ? 3 : 6,
     itemClause,
+    // Team preview arrived in Gen 5, so only earlier gens pick a lead blind.
+    usesLeads: gen <= 4 && !doubles,
     roleWeights: cloneRoleWeights(doubles ? doublesWeights : singlesWeights),
     warnings: id.includes('hackmons') || id.includes('metronome')
       ? ['Format has unusual rules; role inference may be noisy.']

@@ -2,7 +2,18 @@ import {Dex} from '@pkmn/dex';
 import {scoreSetForTeamContext} from './sets';
 import {toId} from './id';
 import {unsupportedTerrainSeedWarnings} from './fieldSupport';
+import {leadScore} from './leads';
 import {megaStonePenalty, multipleMegaStoneWarnings} from './itemConstraints';
+import {usageWeight} from './usageProfile';
+import {
+  abuserCount,
+  committedCondition,
+  fieldConflictPenalty,
+  fieldConflictWarnings,
+  memberAbusedConditions,
+  memberSetConditions,
+  setterCount
+} from './weather';
 import type {
   FormatProfile,
   GenerateOptions,
@@ -51,12 +62,17 @@ function average(values: number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+/**
+ * Chaos teammate weights are excess co-occurrence counts, so they scale with
+ * how often the holder was used. Dividing by the holder's own sample size
+ * turns that into a rate, which keeps raw counts from dominating without
+ * making rarity itself look like synergy.
+ */
 function teammateScore(a: TeamMember, b: TeamMember): number {
   const weight = a.stats.teammates[b.stats.id] ?? 0;
   if (weight <= 0) return 0;
 
-  const usageBaseline = Math.sqrt(Math.max(a.stats.usage, 1) * Math.max(b.stats.usage, 1));
-  return Math.log1p(weight) / usageBaseline;
+  return Math.min(1, weight / Math.max(a.stats.rawCount, 1));
 }
 
 function pairSynergy(a: TeamMember, b: TeamMember): number {
@@ -65,7 +81,7 @@ function pairSynergy(a: TeamMember, b: TeamMember): number {
     teammateScore(b, a)
   ].filter(value => value > 0));
 
-  return clamp(score * 10, 0, 3);
+  return clamp(score * 20, 0, 3);
 }
 
 export function synergyInsights(members: TeamMember[]): SynergyInsight[] {
@@ -128,7 +144,8 @@ export function threatCoverage(members: TeamMember[], dataset: StatsDataset, lim
 
 function usageScore(members: TeamMember[], dataset: StatsDataset): number {
   const maxUsage = Math.max(...dataset.pokemon.map(stats => stats.usage), 1);
-  return clamp(average(members.map(member => member.stats.usage / maxUsage)) * 2, 0, 2);
+  const weight = usageWeight(dataset);
+  return clamp(average(members.map(member => member.stats.usage / maxUsage)) * weight, 0, weight);
 }
 
 function setConfidenceScore(members: TeamMember[]): number {
@@ -220,6 +237,7 @@ function setToTeamFitScore(members: TeamMember[], profile: FormatProfile): numbe
   score -= unsupportedTerrainSeedWarnings(members).length * 1.5;
   score -= megaStonePenalty(members, profile);
   score -= trickRoomSupportPenalty(members, profile);
+  score -= fieldConflictPenalty(members);
 
   return clamp(score, -12, 5);
 }
@@ -238,6 +256,26 @@ function threatScore(members: TeamMember[], dataset: StatsDataset): number {
     .reduce((sum, item) => sum + item.usage, 0);
 
   return clamp((coveredUsage / totalUsage) * 3, 0, 3);
+}
+
+/**
+ * Rewards one committed weather or terrain with dedicated abusers, and marks
+ * down teams that spread themselves across several conditions.
+ */
+function weatherArchetypeFit(members: TeamMember[]): number {
+  const condition = committedCondition(members);
+  if (!condition) return 0;
+
+  const offConditionAbusers = members.filter(member => {
+    if (memberSetConditions(member).has(condition)) return false;
+    const abused = memberAbusedConditions(member);
+    return abused.size > 0 && !abused.has(condition);
+  }).length;
+
+  return 3
+    + abuserCount(members, condition) * 1.8
+    - Math.max(0, setterCount(members, condition) - 1) * 1.5
+    - offConditionAbusers * 1.2;
 }
 
 function archetypeScore(members: TeamMember[], profile: FormatProfile, archetype: Archetype): number {
@@ -259,7 +297,7 @@ function archetypeScore(members: TeamMember[], profile: FormatProfile, archetype
       score = totals.defensivePivot * 1.4 + totals.support + totals.status + totals.hazardRemoval + totals.hazardPreservation;
       break;
     case 'weather':
-      score = totals.weatherTerrainSetter * 1.8 + totals.weatherTerrainAbuser * 1.4;
+      score = weatherArchetypeFit(members);
       break;
     case 'trick-room': {
       const slowComplement = members.reduce((sum, member) => sum + trickRoomSlowComplement(member, profile), 0);
@@ -288,6 +326,7 @@ function warningList(members: TeamMember[], profile: FormatProfile): string[] {
 
   warnings.push(...unsupportedTerrainSeedWarnings(members));
   warnings.push(...multipleMegaStoneWarnings(members, profile));
+  warnings.push(...fieldConflictWarnings(members));
 
   if (trickRoomSupportPenalty(members, profile) > 0) {
     warnings.push('Trick Room needs slow attackers or bulky partners to capitalize on the speed reversal');
@@ -311,7 +350,8 @@ export function scoreTeam(
     typeBalance: 0,
     setToTeamFit: setToTeamFitScore(members, profile),
     duplicateRoles: duplicateRoleScore(members, profile),
-    archetype: archetypeScore(members, profile, archetype)
+    archetype: archetypeScore(members, profile, archetype),
+    leads: leadScore(members, dataset, profile)
   };
 
   const total = Object.values(scores).reduce((sum, value) => sum + value, 0);
@@ -327,6 +367,7 @@ export function scoreTeam(
     setToTeamFit: roundScore(scores.setToTeamFit),
     duplicateRoles: roundScore(scores.duplicateRoles),
     archetype: roundScore(scores.archetype),
+    leads: roundScore(scores.leads),
     warnings: warningList(members, profile)
   };
 }

@@ -54,18 +54,31 @@ describe('scoreTeam', () => {
     expect(selectedFit).toBeGreaterThan(duplicateFit);
   });
 
-  it('normalizes teammate synergy so common raw weights do not dominate alone', () => {
-    const commonA = makePokemon({id: 'common-a', name: 'Common A', usage: 80, teammates: {'common-b': 4000}});
-    const commonB = makePokemon({id: 'common-b', name: 'Common B', usage: 80, teammates: {'common-a': 4000}});
-    const nicheA = makePokemon({id: 'niche-a', name: 'Niche A', usage: 5, teammates: {'niche-b': 700}});
-    const nicheB = makePokemon({id: 'niche-b', name: 'Niche B', usage: 5, teammates: {'niche-a': 700}});
+  it('scores teammate synergy by co-occurrence rate, not by raw weight', () => {
+    const commonA = makePokemon({id: 'common-a', name: 'Common A', usage: 80, rawCount: 8000, teammates: {'common-b': 4000}});
+    const commonB = makePokemon({id: 'common-b', name: 'Common B', usage: 80, rawCount: 8000, teammates: {'common-a': 4000}});
+    const nicheA = makePokemon({id: 'niche-a', name: 'Niche A', usage: 5, rawCount: 500, teammates: {'niche-b': 250}});
+    const nicheB = makePokemon({id: 'niche-b', name: 'Niche B', usage: 5, rawCount: 500, teammates: {'niche-a': 250}});
     const dataset = makeDataset([commonA, commonB, nicheA, nicheB]);
     const profile = inferFormatProfile('gen9ou');
 
     const commonScore = scoreTeam([member(commonA), member(commonB)], dataset, profile).synergy;
     const nicheScore = scoreTeam([member(nicheA), member(nicheB)], dataset, profile).synergy;
 
-    expect(commonScore).toBeLessThan(nicheScore);
+    expect(commonScore).toBe(nicheScore);
+  });
+
+  it('does not treat a rarely used Pokemon as a better teammate than a staple', () => {
+    const anchor = makePokemon({id: 'anchor', name: 'Anchor', usage: 90, rawCount: 9000, teammates: {staple: 900, rare: 90}});
+    const staple = makePokemon({id: 'staple', name: 'Staple', usage: 40, rawCount: 4000, teammates: {anchor: 900}});
+    const rare = makePokemon({id: 'rare', name: 'Rare', usage: 1, rawCount: 100, teammates: {anchor: 20}});
+    const dataset = makeDataset([anchor, staple, rare]);
+    const profile = inferFormatProfile('gen9ou');
+
+    const stapleScore = scoreTeam([member(anchor), member(staple)], dataset, profile).synergy;
+    const rareScore = scoreTeam([member(anchor), member(rare)], dataset, profile).synergy;
+
+    expect(stapleScore).toBeGreaterThan(rareScore);
   });
 
   it('rewards teams that match the selected weather archetype', () => {

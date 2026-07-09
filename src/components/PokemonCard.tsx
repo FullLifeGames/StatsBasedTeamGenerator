@@ -41,6 +41,7 @@ export function PokemonCard({member, onToggleLock, onReplace}: PokemonCardProps)
   const roles = topRoles(member.set.roles);
   const isLocked = Boolean(member.locked);
   const lockLabel = `${isLocked ? 'Unlock' : 'Lock'} ${member.stats.name}`;
+  const leadTitle = `Sent out first. Leads ${(member.stats.leadUsage ?? 0).toFixed(1)}% of games in this format.`;
 
   return (
     <article className={isLocked ? 'pokemon-card pokemon-card--locked' : 'pokemon-card'}>
@@ -75,6 +76,9 @@ export function PokemonCard({member, onToggleLock, onReplace}: PokemonCardProps)
       </div>
 
       <div className="role-chip-list" aria-label={`${member.stats.name} roles`}>
+        {member.lead ? (
+          <span className="role-chip role-chip--lead" title={leadTitle}>Lead</span>
+        ) : null}
         {roles.length ? roles.map(role => (
           <span className="role-chip" key={role}>{role}</span>
         )) : (

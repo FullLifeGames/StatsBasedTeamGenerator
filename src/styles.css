@@ -391,6 +391,12 @@ select {
   color: #64748b;
 }
 
+.role-chip--lead {
+  border-color: #d6a545;
+  background: #fdf2da;
+  color: #7c4d0d;
+}
+
 .move-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -685,6 +691,12 @@ select {
   border-color: #3f4f63;
   background: #1f2937;
   color: #a8b6c7;
+}
+
+.app-shell--dark .role-chip--lead {
+  border-color: #d6a545;
+  background: #3d2f11;
+  color: #fcd97a;
 }
 
 @media (max-width: 1120px) {

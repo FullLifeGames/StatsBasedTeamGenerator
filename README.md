@@ -17,6 +17,10 @@ The current deployment is available at https://teamgen.fulllifegames.com/.
 
 - Multi-format Smogon stats browser with month, format, and cutoff selection.
 - Team generation from usage, checks/counters, teammate synergy, and role needs.
+- Weather teams commit to one condition and pair its setter with matching abusers.
+- Standardized formats such as Gen 1 OU lean harder on their near-mandatory usage.
+- Seeded sampling varies teams across rerolls without reaching for niche Pokemon.
+- Gen 1 to 4 teams are scored on their lead and import it in the first slot.
 - Singles-aware hazards, removal, preservation, pivots, and item disruption.
 - Doubles-aware speed control, board positioning, spread pressure, and item clause.
 - Contextual set selection from stats and Smogon analysis templates.
