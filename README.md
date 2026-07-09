@@ -20,6 +20,7 @@ The current deployment is available at https://teamgen.fulllifegames.com/.
 - Seven archetypes, from hyper offense to stall, that reshape which teams score well.
 - Sets adapt to the archetype and the team: moves, item, ability, and EV spread.
 - Weather teams commit to one condition and pair its setter with matching abusers.
+- Unpaired weather is penalized: Drizzle without Swift Swim, and Swift Swim without Drizzle.
 - Standardized formats such as Gen 1 OU lean harder on their near-mandatory usage.
 - Seeded sampling varies teams across rerolls without reaching for niche Pokemon.
 - Gen 1 to 4 teams are scored on their lead and import it in the first slot.

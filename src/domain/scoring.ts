@@ -13,7 +13,9 @@ import {
   fieldConflictWarnings,
   memberAbusedConditions,
   memberSetConditions,
-  setterCount
+  setterCount,
+  unpairedWeatherPenalty,
+  unpairedWeatherWarnings
 } from './weather';
 import type {
   Archetype,
@@ -246,6 +248,7 @@ function setToTeamFitScore(members: TeamMember[], profile: FormatProfile): numbe
   score -= megaStonePenalty(members, profile);
   score -= trickRoomSupportPenalty(members, profile);
   score -= fieldConflictPenalty(members);
+  score -= unpairedWeatherPenalty(members);
 
   return clamp(score, -12, 5);
 }
@@ -327,6 +330,7 @@ function warningList(members: TeamMember[], profile: FormatProfile, archetype: A
   warnings.push(...unsupportedTerrainSeedWarnings(members));
   warnings.push(...multipleMegaStoneWarnings(members, profile));
   warnings.push(...fieldConflictWarnings(members));
+  warnings.push(...unpairedWeatherWarnings(members));
 
   if (trickRoomSupportPenalty(members, profile) > 0) {
     warnings.push('Trick Room needs slow attackers or bulky partners to capitalize on the speed reversal');

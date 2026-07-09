@@ -11,7 +11,9 @@ import {
   memberAbusedConditions,
   memberSetConditions,
   settableConditions,
-  setterCount
+  setterCount,
+  unpairedWeatherPenalty,
+  unpairedWeatherWarnings
 } from './weather';
 
 function member(name: string, set: {ability?: string; item?: string; moves?: string[]}, usage = 10): TeamMember {
@@ -97,6 +99,76 @@ describe('setterCount and abuserCount', () => {
     const team = [pelipper, barraskewda];
     expect(setterCount(team, 'rain')).toBe(1);
     expect(abuserCount(team, 'rain')).toBe(1);
+  });
+});
+
+describe('unpairedWeatherPenalty', () => {
+  it('punishes a weather setter that nothing on the team takes advantage of', () => {
+    const team = [pelipper, greatTusk];
+
+    expect(unpairedWeatherPenalty(team)).toBe(2);
+    expect(unpairedWeatherWarnings(team)).toEqual([
+      'Rain is set but nothing on the team takes advantage of it'
+    ]);
+  });
+
+  it('punishes a weather abuser that no teammate sets weather for', () => {
+    const team = [barraskewda, greatTusk];
+
+    expect(unpairedWeatherPenalty(team)).toBe(2);
+    expect(unpairedWeatherWarnings(team)).toEqual([
+      'Barraskewda needs Rain, which no teammate sets'
+    ]);
+  });
+
+  it('is free once the setter and the abuser are paired', () => {
+    expect(unpairedWeatherPenalty([pelipper, barraskewda])).toBe(0);
+    expect(unpairedWeatherWarnings([pelipper, barraskewda])).toEqual([]);
+  });
+
+  it('applies to sun, sand, and snow the same way', () => {
+    const torkoalAlone = [torkoal, greatTusk];
+    const excadrill = member('Excadrill', {ability: 'Sand Rush'});
+    const tyranitar = member('Tyranitar', {ability: 'Sand Stream'});
+    const abomasnow = member('Abomasnow', {ability: 'Snow Warning'});
+    const beartic = member('Beartic', {ability: 'Slush Rush'});
+
+    // Torkoal's Drought is paired: Great Tusk's Protosynthesis wants sun.
+    expect(unpairedWeatherPenalty(torkoalAlone)).toBe(0);
+    expect(unpairedWeatherPenalty([torkoal, venusaur])).toBe(0);
+    expect(unpairedWeatherPenalty([tyranitar, excadrill])).toBe(0);
+    expect(unpairedWeatherPenalty([abomasnow, beartic])).toBe(0);
+    expect(unpairedWeatherPenalty([excadrill, beartic])).toBe(4);
+  });
+
+  it('does not punish Booster Energy abilities, which need no weather', () => {
+    // Protosynthesis and Quark Drive run off the item, so they are not dependent.
+    expect(unpairedWeatherPenalty([greatTusk, kingambit])).toBe(0);
+    expect(unpairedWeatherWarnings([greatTusk, kingambit])).toEqual([]);
+  });
+
+  it('does not treat an incidental setter as a weather commitment', () => {
+    const slowking = member('Slowking-Galar', {ability: 'Regenerator', moves: ['Chilly Reception', 'Future Sight']});
+
+    expect(unpairedWeatherPenalty([slowking, kingambit])).toBe(0);
+  });
+
+  it('lets an incidental setter still satisfy a teammate that needs the weather', () => {
+    const slowking = member('Slowking-Galar', {ability: 'Regenerator', moves: ['Chilly Reception']});
+    const beartic = member('Beartic', {ability: 'Slush Rush'});
+
+    expect(unpairedWeatherPenalty([slowking, beartic])).toBe(0);
+  });
+
+  it('does not punish moves that are playable without their weather', () => {
+    // Gen 1 Blizzard is universal and has no snow to rely on.
+    const lapras = member('Lapras', {moves: ['Blizzard', 'Body Slam']});
+    expect(unpairedWeatherPenalty([lapras, kingambit])).toBe(0);
+  });
+
+  it('ignores terrain, which is covered by the seed warnings', () => {
+    const tapuKoko = member('Tapu Koko', {ability: 'Electric Surge'});
+    expect(unpairedWeatherPenalty([tapuKoko, kingambit])).toBe(0);
   });
 });
 

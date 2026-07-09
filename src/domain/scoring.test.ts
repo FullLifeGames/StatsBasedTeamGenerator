@@ -54,6 +54,30 @@ describe('scoreTeam', () => {
     expect(selectedFit).toBeGreaterThan(duplicateFit);
   });
 
+  it('marks a team down for weather that is set but never used', () => {
+    const pelipper = makePokemon({id: 'pelipper', name: 'Pelipper', abilities: {drizzle: 100}, moves: {hurricane: 100, uturn: 90}});
+    const barraskewda = makePokemon({id: 'barraskewda', name: 'Barraskewda', abilities: {swiftswim: 100}, moves: {liquidation: 100, closecombat: 90}});
+    const kingambit = makePokemon({id: 'kingambit', name: 'Kingambit', moves: {kowtowcleave: 100, suckerpunch: 90}});
+    const dataset = makeDataset([pelipper, barraskewda, kingambit]);
+    const profile = inferFormatProfile('gen9ou');
+
+    const unpaired = scoreTeam([member(pelipper), member(kingambit)], dataset, profile);
+    const paired = scoreTeam([member(pelipper), member(barraskewda)], dataset, profile);
+
+    expect(unpaired.setToTeamFit).toBeLessThan(paired.setToTeamFit);
+    expect(unpaired.warnings).toContain('Rain is set but nothing on the team takes advantage of it');
+    expect(paired.warnings).not.toContain('Rain is set but nothing on the team takes advantage of it');
+  });
+
+  it('marks a team down for a weather abuser with no weather', () => {
+    const barraskewda = makePokemon({id: 'barraskewda', name: 'Barraskewda', abilities: {swiftswim: 100}, moves: {liquidation: 100, closecombat: 90}});
+    const kingambit = makePokemon({id: 'kingambit', name: 'Kingambit', moves: {kowtowcleave: 100, suckerpunch: 90}});
+    const dataset = makeDataset([barraskewda, kingambit]);
+
+    const score = scoreTeam([member(barraskewda), member(kingambit)], dataset, inferFormatProfile('gen9ou'));
+    expect(score.warnings).toContain('Barraskewda needs Rain, which no teammate sets');
+  });
+
   it('does not saturate the role score, so it can tell teams apart', () => {
     const support = makePokemon({id: 'blissey', name: 'Blissey', moves: {softboiled: 100, toxic: 90, teleport: 80, seismictoss: 70}});
     const attacker = makePokemon({id: 'weavile', name: 'Weavile', moves: {knockoff: 100, iceshard: 90, closecombat: 80, swordsdance: 70}});

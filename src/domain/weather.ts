@@ -90,6 +90,41 @@ const abuserMoves: Record<string, FieldCondition> = {
   blizzard: 'snow'
 };
 
+/**
+ * Abilities, items, and moves that are dead weight without their weather.
+ *
+ * Deliberately narrower than the abuser tables above. Protosynthesis and Quark
+ * Drive run on Booster Energy without any weather, Thunder and Blizzard are
+ * played unboosted in plenty of formats, and Sand Veil or Snow Cloak do nothing
+ * for a team beyond evasion. Only entries that are genuinely useless without
+ * the weather belong here, or every team would be penalized.
+ */
+const dependentAbilities: Record<string, FieldCondition> = {
+  swiftswim: 'rain',
+  chlorophyll: 'sun',
+  solarpower: 'sun',
+  sandrush: 'sand',
+  slushrush: 'snow'
+};
+
+const dependentItems: Record<string, FieldCondition> = {
+  damprock: 'rain',
+  heatrock: 'sun',
+  smoothrock: 'sand',
+  icyrock: 'snow'
+};
+
+const dependentMoves: Record<string, FieldCondition> = {
+  auroraveil: 'snow'
+};
+
+/**
+ * Sets the weather as a side effect of doing something else. Chilly Reception
+ * is played as a pivot move, so its snow is a bonus rather than a plan, and a
+ * team running it is not committing to snow.
+ */
+const incidentalSetterMoves = new Set(['chillyreception']);
+
 const moveDivisor = 4;
 
 function mergeMax(...maps: Array<Map<FieldCondition, number>>): Map<FieldCondition, number> {
@@ -249,6 +284,82 @@ function conflictingConditions(members: TeamMember[]): {weather: FieldCondition[
     weather: conditions.filter(isWeatherCondition),
     terrain: conditions.filter(condition => !isWeatherCondition(condition))
   };
+}
+
+/** Conditions the team sets on purpose, rather than as a side effect. */
+export function committedSetConditions(members: TeamMember[]): Set<FieldCondition> {
+  const conditions = new Set<FieldCondition>();
+
+  for (const member of members) {
+    const {ability, moves} = selectedIds(member);
+
+    const fromAbility = setterAbilities[ability];
+    if (fromAbility) conditions.add(fromAbility);
+
+    for (const move of moves) {
+      const fromMove = setterMoves[move];
+      if (fromMove && !incidentalSetterMoves.has(move)) conditions.add(fromMove);
+    }
+  }
+
+  return conditions;
+}
+
+/** Weather this member's chosen set relies on, and is wasted without. */
+export function memberDependentConditions(member: TeamMember): Set<FieldCondition> {
+  const {ability, item, moves} = selectedIds(member);
+  const conditions = new Set<FieldCondition>();
+
+  const fromAbility = dependentAbilities[ability];
+  if (fromAbility) conditions.add(fromAbility);
+
+  const fromItem = dependentItems[item];
+  if (fromItem) conditions.add(fromItem);
+
+  for (const move of moves) {
+    const fromMove = dependentMoves[move];
+    if (fromMove) conditions.add(fromMove);
+  }
+
+  return conditions;
+}
+
+interface UnpairedWeather {
+  setterOnly: FieldCondition[];
+  dependents: Array<{name: string; condition: FieldCondition}>;
+}
+
+/**
+ * Weather only pays for itself as a pair. A Drizzle setter with nothing that
+ * wants rain is a wasted slot, and a Swift Swim sweeper with no Drizzle is a
+ * worse Pokemon than its stats suggest.
+ */
+function unpairedWeather(members: TeamMember[]): UnpairedWeather {
+  const set = new Set([...teamSetConditions(members)].filter(isWeatherCondition));
+
+  // Only a deliberate setter is expected to pay for itself; an incidental one
+  // still satisfies a teammate that depends on the weather.
+  const setterOnly = [...committedSetConditions(members)]
+    .filter(condition => isWeatherCondition(condition) && abuserCount(members, condition) === 0);
+  const dependents = members.flatMap(member => [...memberDependentConditions(member)]
+    .filter(condition => isWeatherCondition(condition) && !set.has(condition))
+    .map(condition => ({name: member.stats.name, condition})));
+
+  return {setterOnly, dependents};
+}
+
+export function unpairedWeatherPenalty(members: TeamMember[]): number {
+  const {setterOnly, dependents} = unpairedWeather(members);
+  return setterOnly.length * 2 + dependents.length * 2;
+}
+
+export function unpairedWeatherWarnings(members: TeamMember[]): string[] {
+  const {setterOnly, dependents} = unpairedWeather(members);
+
+  return [
+    ...setterOnly.map(condition => `${conditionLabel(condition)} is set but nothing on the team takes advantage of it`),
+    ...dependents.map(entry => `${entry.name} needs ${conditionLabel(entry.condition)}, which no teammate sets`)
+  ];
 }
 
 export function fieldConflictPenalty(members: TeamMember[]): number {

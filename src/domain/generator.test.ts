@@ -372,7 +372,11 @@ describe('generateTeam', () => {
       ouPokemon({id: 'tyranitar', name: 'Tyranitar', usage: 16, abilities: {sandstream: 100}, moves: {stoneedge: 100, crunch: 90, earthquake: 80, ironhead: 70}}),
       ouPokemon({id: 'excadrill', name: 'Excadrill', usage: 15, abilities: {sandrush: 100}, moves: {earthquake: 100, ironhead: 90, rockslide: 80, rapidspin: 70}}),
       ouPokemon({id: 'kingambit', name: 'Kingambit', usage: 14, moves: {kowtowcleave: 100, suckerpunch: 95, ironhead: 80, swordsdance: 70}}),
-      ouPokemon({id: 'gholdengo', name: 'Gholdengo', usage: 13, abilities: {goodasgold: 100}, moves: {makeitrain: 100, shadowball: 95, recover: 60, nastyplot: 50}})
+      ouPokemon({id: 'gholdengo', name: 'Gholdengo', usage: 13, abilities: {goodasgold: 100}, moves: {makeitrain: 100, shadowball: 95, recover: 60, nastyplot: 50}}),
+      // Weather-neutral filler, so committing to one weather is actually possible.
+      ouPokemon({id: 'dragapult', name: 'Dragapult', usage: 12, abilities: {infiltrator: 100}, moves: {dracometeor: 100, shadowball: 95, uturn: 85, willowisp: 60}}),
+      ouPokemon({id: 'greattusk', name: 'Great Tusk', usage: 11, abilities: {protosynthesis: 100}, moves: {headlongrush: 100, rapidspin: 90, knockoff: 80, icespinner: 70}}),
+      ouPokemon({id: 'clefable', name: 'Clefable', usage: 10, abilities: {magicguard: 100}, moves: {moonblast: 100, softboiled: 90, knockoff: 80, thunderwave: 70}})
     ]);
 
     const team = generateTeam(dataset, 'gen9ou', {seeds: [], archetype: 'weather', novelty: 0});
