@@ -238,6 +238,8 @@ sudo systemctl restart team-generator
 
 - `https://www.smogon.com/stats` for usage, chaos, teammate, and checks/counters
   data.
+- `https://www.smogon.com/stats/<month>/leads` for lead usage, which shapes Gen 1
+  to 4 teams because they choose a lead before team preview exists.
 - `@pkmn/smogon` for processed Smogon analysis set templates.
 - `@pkmn/sim` for Showdown-style team validation.
 - `@pkmn/img` for Pokemon sprites.
