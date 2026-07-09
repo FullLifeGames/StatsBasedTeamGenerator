@@ -389,6 +389,50 @@ describe('generateTeam', () => {
     expect(team.score.warnings).not.toContain(expect.stringContaining('Conflicting weather'));
   });
 
+  it('switches a teammate onto the ability that uses the team weather', () => {
+    // Basculegion is added before Pelipper, so its set is built before rain exists.
+    const dataset = makeDataset([
+      ouPokemon({id: 'basculegion', name: 'Basculegion', usage: 43, abilities: {adaptability: 80, swiftswim: 20}, moves: {wavecrash: 100, aquajet: 90, lastrespects: 80, protect: 70}}),
+      ouPokemon({id: 'pelipper', name: 'Pelipper', usage: 15, abilities: {drizzle: 100}, moves: {hurricane: 100, tailwind: 90, protect: 80, weatherball: 70}}),
+      ouPokemon({id: 'incineroar', name: 'Incineroar', usage: 42, abilities: {intimidate: 100}, moves: {fakeout: 100, partingshot: 90, knockoff: 80, flareblitz: 70}})
+    ]);
+
+    const team = generateTeam(dataset, 'gen9vgc2025regg', {seeds: ['Pelipper', 'Basculegion'], archetype: 'balanced', novelty: 0});
+    const basculegion = team.members.find(member => member.stats.id === 'basculegion')!;
+
+    expect(basculegion.set.ability).toBe('Swift Swim');
+    expect(team.score.warnings).not.toContain('Rain is set but nothing on the team takes advantage of it');
+  });
+
+  it('switches a Pokemon off a weather ability the team never sets', () => {
+    const dataset = makeDataset([
+      ouPokemon({id: 'excadrill', name: 'Excadrill', usage: 30, abilities: {sandrush: 70, moldbreaker: 30}, moves: {earthquake: 100, ironhead: 90, rapidspin: 80, swordsdance: 70}}),
+      ouPokemon({id: 'skarmory', name: 'Skarmory', usage: 20, abilities: {sturdy: 100}, moves: {roost: 100, spikes: 90, bodypress: 80, whirlwind: 70}}),
+      ouPokemon({id: 'dondozo', name: 'Dondozo', usage: 18, abilities: {unaware: 100}, moves: {rest: 100, curse: 90, waterfall: 80, sleeptalk: 70}})
+    ]);
+
+    const team = generateTeam(dataset, 'gen9ou', {seeds: ['Excadrill'], archetype: 'balanced', novelty: 0});
+    const excadrill = team.members.find(member => member.stats.id === 'excadrill')!;
+
+    // Sand Rush is the more used ability, but there is no sandstorm to rush in.
+    expect(excadrill.set.ability).toBe('Mold Breaker');
+    expect(team.score.warnings).not.toContain('Excadrill needs Sandstorm, which no teammate sets');
+  });
+
+  it('keeps a weather ability when the team actually sets that weather', () => {
+    const dataset = makeDataset([
+      ouPokemon({id: 'excadrill', name: 'Excadrill', usage: 30, abilities: {sandrush: 70, moldbreaker: 30}, moves: {earthquake: 100, ironhead: 90, rapidspin: 80, swordsdance: 70}}),
+      ouPokemon({id: 'tyranitar', name: 'Tyranitar', usage: 25, abilities: {sandstream: 100}, moves: {stoneedge: 100, crunch: 90, earthquake: 80, ironhead: 70}}),
+      ouPokemon({id: 'skarmory', name: 'Skarmory', usage: 20, abilities: {sturdy: 100}, moves: {roost: 100, spikes: 90, bodypress: 80, whirlwind: 70}})
+    ]);
+
+    const team = generateTeam(dataset, 'gen9ou', {seeds: ['Excadrill', 'Tyranitar'], archetype: 'balanced', novelty: 0});
+    const excadrill = team.members.find(member => member.stats.id === 'excadrill')!;
+
+    expect(excadrill.set.ability).toBe('Sand Rush');
+    expect(team.score.warnings).toEqual([]);
+  });
+
   it('keeps the staples of a standardized format while rotating its flex slots', () => {
     const dataset = standardizedDataset();
 

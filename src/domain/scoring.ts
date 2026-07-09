@@ -236,21 +236,27 @@ function trickRoomSupportPenalty(members: TeamMember[], profile: FormatProfile):
   return Math.max(0, requiredComplement - complementScore) * 2.5;
 }
 
+/**
+ * The set-fit reward is capped before the penalties are taken off. Subtracting
+ * them first let a team whose reward already exceeded the ceiling absorb any
+ * penalty for free, so unpaired weather and stacked Mega Stones were scored but
+ * never actually cost anything.
+ */
 function setToTeamFitScore(members: TeamMember[], profile: FormatProfile): number {
-  let score = 0;
+  let reward = 0;
 
   for (let index = 0; index < members.length; index += 1) {
     const previousSetRoles = members.slice(0, index).map(member => ({roles: member.set.roles}));
-    score += scoreSetForTeamContext(members[index].set, previousSetRoles, profile);
+    reward += scoreSetForTeamContext(members[index].set, previousSetRoles, profile);
   }
 
-  score -= unsupportedTerrainSeedWarnings(members).length * 1.5;
-  score -= megaStonePenalty(members, profile);
-  score -= trickRoomSupportPenalty(members, profile);
-  score -= fieldConflictPenalty(members);
-  score -= unpairedWeatherPenalty(members);
+  const penalty = unsupportedTerrainSeedWarnings(members).length * 1.5
+    + megaStonePenalty(members, profile)
+    + trickRoomSupportPenalty(members, profile)
+    + fieldConflictPenalty(members)
+    + unpairedWeatherPenalty(members);
 
-  return clamp(score, -12, 5);
+  return clamp(clamp(reward, -6, 5) - penalty, -12, 5);
 }
 
 function synergyScore(members: TeamMember[]): number {

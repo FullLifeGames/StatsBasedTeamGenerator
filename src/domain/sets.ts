@@ -2,6 +2,8 @@ import {Dex} from '@pkmn/dex';
 import {abilityBias, itemBias, roleAffinity, spreadBias} from './archetype';
 import {toId} from './id';
 import {detectRolesForMoves} from './roles';
+import {abilityConditionBias, dependsOnMissingWeather} from './weather';
+import type {FieldCondition} from './weather';
 import type {Archetype, AnalysisSetTemplate, FormatProfile, PokemonStats, RoleScores, SetCandidate, WeightedTable} from './types';
 
 /** Roles a single move can plug for a team that lacks them. */
@@ -19,6 +21,7 @@ interface TeamContext {
   itemClause?: boolean;
   usedItems?: Set<string>;
   archetype?: Archetype;
+  teamConditions?: Set<FieldCondition>;
 }
 
 /**
@@ -60,8 +63,7 @@ function topEntries(table: WeightedTable, limit = 1): Array<[string, number]> {
  */
 function pickBiased(
   table: WeightedTable,
-  archetype: Archetype | undefined,
-  bias: (id: string, archetype: Archetype) => number,
+  bias: (id: string) => number,
   allow: (id: string) => boolean = () => true
 ): [string, number] {
   const total = tableTotal(table);
@@ -70,11 +72,10 @@ function pickBiased(
 
   const playable = entries.filter(([, weight]) => weight / total >= minimumShare);
   const pool = playable.length ? playable : entries;
-  if (!archetype) return pool.sort(([, a], [, b]) => b - a)[0];
 
   return pool.reduce((best, entry) => {
-    const score = (weight: number, id: string) => weight / total + bias(id, archetype) * biasWeight;
-    return score(entry[1], entry[0]) > score(best[1], best[0]) ? entry : best;
+    const score = ([id, weight]: [string, number]) => weight / total + bias(id) * biasWeight;
+    return score(entry) > score(best) ? entry : best;
   }, pool[0]);
 }
 
@@ -85,7 +86,7 @@ function parseSpreadEvs(spreadId: string): number[] {
 }
 
 function pickSpread(table: WeightedTable, archetype: Archetype | undefined): [string, number] {
-  return pickBiased(table, archetype, (id, current) => spreadBias(parseSpreadEvs(id), current));
+  return pickBiased(table, id => archetype ? spreadBias(parseSpreadEvs(id), archetype) : 0);
 }
 
 function titleCase(id: string): string {
@@ -400,6 +401,38 @@ function average(values: number[]): number {
   return scored.reduce((sum, value) => sum + value, 0) / scored.length;
 }
 
+/**
+ * The ability this Pokemon should run given the weather its team ends up with,
+ * or '' if none of its abilities care. Sets are built as members are added, so
+ * a Pokemon chosen before the weather setter never saw the weather coming.
+ */
+export function bestConditionAbility(stats: PokemonStats, profile: FormatProfile, conditions: Set<FieldCondition>): string {
+  if (!conditions.size) return '';
+
+  // Popularity is not the question here: the team already brings the weather,
+  // so any ability that uses it beats one that ignores it. Requiring non-zero
+  // usage keeps the pick to abilities the format actually plays.
+  const [abilityId] = Object.entries(stats.abilities)
+    .filter(([id, weight]) => weight > 0 && abilityConditionBias(id, conditions) > 0)
+    .sort(([, a], [, b]) => b - a)[0] ?? [''];
+
+  const legal = legalAbilityId(profile, abilityId);
+  return legal ? dexDisplay(profile, 'ability', legal) : '';
+}
+
+/**
+ * The most-used ability that does not depend on weather the team never brings.
+ * Sand Rush with no sandstorm is a dead slot; Mold Breaker is not.
+ */
+export function bestWeatherFreeAbility(stats: PokemonStats, profile: FormatProfile, conditions: Set<FieldCondition>): string {
+  const [abilityId] = Object.entries(stats.abilities)
+    .filter(([id, weight]) => weight > 0 && !dependsOnMissingWeather(id, conditions))
+    .sort(([, a], [, b]) => b - a)[0] ?? [''];
+
+  const legal = legalAbilityId(profile, abilityId);
+  return legal ? dexDisplay(profile, 'ability', legal) : '';
+}
+
 export function buildSetCandidates(stats: PokemonStats, profile: FormatProfile, context?: TeamContext): SetCandidate[] {
   const analysisCandidates = (stats.analysisSets ?? [])
     .filter(template => templateAllowedByContext(template, context))
@@ -409,9 +442,13 @@ export function buildSetCandidates(stats: PokemonStats, profile: FormatProfile, 
   if (analysisCandidates.length) return analysisCandidates;
 
   const archetype = context?.archetype;
-  const [abilityId, abilityWeight] = pickBiased(stats.abilities, archetype, abilityBias);
+  const teamConditions = context?.teamConditions ?? new Set<FieldCondition>();
+  const [abilityId, abilityWeight] = pickBiased(
+    stats.abilities,
+    id => (archetype ? abilityBias(id, archetype) : 0) + abilityConditionBias(id, teamConditions)
+  );
   const usedItemIds = new Set([...(context?.usedItems ?? new Set<string>())].map(toId));
-  const [selectedItemId, itemWeight] = pickBiased(stats.items, archetype, itemBias, candidateItemId => {
+  const [selectedItemId, itemWeight] = pickBiased(stats.items, id => archetype ? itemBias(id, archetype) : 0, candidateItemId => {
     const legalItem = legalItemId(profile, candidateItemId);
     if (!legalItem) return true;
     const display = dexDisplay(profile, 'item', legalItem);

@@ -69,6 +69,22 @@ describe('scoreTeam', () => {
     expect(paired.warnings).not.toContain('Rain is set but nothing on the team takes advantage of it');
   });
 
+  it('does not let a high set-fit reward absorb a penalty for free', () => {
+    // Doubles set-fit rewards easily exceed the cap, which previously meant the
+    // penalty was subtracted and then clamped away.
+    const pelipper = makePokemon({id: 'pelipper', name: 'Pelipper', abilities: {drizzle: 100}, moves: {hurricane: 100, tailwind: 95, protect: 90, uturn: 85}});
+    const incineroar = makePokemon({id: 'incineroar', name: 'Incineroar', moves: {fakeout: 100, partingshot: 95, knockoff: 90, flareblitz: 85}});
+    const whimsicott = makePokemon({id: 'whimsicott', name: 'Whimsicott', moves: {tailwind: 100, fakeout: 95, protect: 90, moonblast: 85}});
+    const dataset = makeDataset([pelipper, incineroar, whimsicott]);
+    const profile = inferFormatProfile('gen9vgc2025regg');
+
+    const withDrizzle = scoreTeam([member(pelipper, 'gen9vgc2025regg'), member(incineroar, 'gen9vgc2025regg'), member(whimsicott, 'gen9vgc2025regg')], dataset, profile);
+    const withoutDrizzle = scoreTeam([member(incineroar, 'gen9vgc2025regg'), member(whimsicott, 'gen9vgc2025regg')], dataset, profile);
+
+    expect(withDrizzle.warnings).toContain('Rain is set but nothing on the team takes advantage of it');
+    expect(withDrizzle.setToTeamFit).toBeLessThan(withoutDrizzle.setToTeamFit);
+  });
+
   it('marks a team down for a weather abuser with no weather', () => {
     const barraskewda = makePokemon({id: 'barraskewda', name: 'Barraskewda', abilities: {swiftswim: 100}, moves: {liquidation: 100, closecombat: 90}});
     const kingambit = makePokemon({id: 'kingambit', name: 'Kingambit', moves: {kowtowcleave: 100, suckerpunch: 90}});

@@ -2,10 +2,13 @@ import {describe, expect, it} from 'vitest';
 import {makePokemon} from '../test/fixtures';
 import {emptyRoles} from './formatProfile';
 import type {TeamMember} from './types';
+import type {FieldCondition} from './weather';
 import {
+  abilityConditionBias,
   abusedConditions,
   abuserCount,
   committedCondition,
+  dependsOnMissingWeather,
   fieldConflictPenalty,
   fieldConflictWarnings,
   memberAbusedConditions,
@@ -169,6 +172,41 @@ describe('unpairedWeatherPenalty', () => {
   it('ignores terrain, which is covered by the seed warnings', () => {
     const tapuKoko = member('Tapu Koko', {ability: 'Electric Surge'});
     expect(unpairedWeatherPenalty([tapuKoko, kingambit])).toBe(0);
+  });
+});
+
+describe('abilityConditionBias and dependsOnMissingWeather', () => {
+  const rain = new Set<FieldCondition>(['rain']);
+
+  it('rewards an ability that uses the weather the team already brings', () => {
+    expect(abilityConditionBias('Swift Swim', rain)).toBe(1);
+    expect(abilityConditionBias('Adaptability', rain)).toBe(0);
+  });
+
+  it('discourages bringing a second weather to a committed team', () => {
+    expect(abilityConditionBias('Drought', rain)).toBe(-1);
+    expect(abilityConditionBias('Drizzle', rain)).toBe(0);
+    expect(abilityConditionBias('Drought', new Set())).toBe(0);
+  });
+
+  it('knows which abilities are dead without their weather', () => {
+    expect(dependsOnMissingWeather('Sand Rush', new Set())).toBe(true);
+    expect(dependsOnMissingWeather('Sand Rush', new Set<FieldCondition>(['sand']))).toBe(false);
+    expect(dependsOnMissingWeather('Mold Breaker', new Set())).toBe(false);
+    // Booster Energy runs these without any weather.
+    expect(dependsOnMissingWeather('Protosynthesis', new Set())).toBe(false);
+  });
+});
+
+describe('Electro Shot', () => {
+  it('counts as a rain abuser, since rain charges it instantly', () => {
+    const archaludon = makePokemon({id: 'archaludon', name: 'Archaludon', moves: {electroshot: 100, dracometeor: 90, bodypress: 80, protect: 70}});
+    expect(abusedConditions(archaludon).has('rain')).toBe(true);
+  });
+
+  it('pairs with a Drizzle setter', () => {
+    const archaludon = member('Archaludon', {ability: 'Stamina', moves: ['Electro Shot', 'Draco Meteor']});
+    expect(unpairedWeatherPenalty([pelipper, archaludon])).toBe(0);
   });
 });
 

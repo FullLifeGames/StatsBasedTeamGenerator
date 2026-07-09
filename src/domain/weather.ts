@@ -83,6 +83,8 @@ const abuserItems: Record<string, FieldCondition> = {
 const abuserMoves: Record<string, FieldCondition> = {
   thunder: 'rain',
   hurricane: 'rain',
+  // Electro Shot charges instantly in rain, which is the whole point of it.
+  electroshot: 'rain',
   solarbeam: 'sun',
   solarblade: 'sun',
   growth: 'sun',
@@ -124,6 +126,8 @@ const dependentMoves: Record<string, FieldCondition> = {
  * team running it is not committing to snow.
  */
 const incidentalSetterMoves = new Set(['chillyreception']);
+
+const unpairedWeatherCost = 2;
 
 const moveDivisor = 4;
 
@@ -234,6 +238,30 @@ export function memberAbusedConditions(member: TeamMember): Set<FieldCondition> 
 
 export function isWeatherCondition(condition: FieldCondition): boolean {
   return weatherConditions.has(condition);
+}
+
+/**
+ * Grades an ability against the weather the team already brings, so a Pokemon
+ * on a Drizzle team reaches for Swift Swim over its more popular ability, and
+ * nobody brings a second weather to a team that has already committed.
+ */
+/** True when this ability needs a weather the team never brings, making it dead. */
+export function dependsOnMissingWeather(ability: string, active: Set<FieldCondition>): boolean {
+  const condition = dependentAbilities[toId(ability)];
+  return Boolean(condition) && !active.has(condition);
+}
+
+export function abilityConditionBias(ability: string, active: Set<FieldCondition>): number {
+  const id = toId(ability);
+  if (!id) return 0;
+
+  const abused = abuserAbilities[id];
+  if (abused) return active.has(abused) ? 1 : 0;
+
+  const sets = setterAbilities[id];
+  if (sets && active.size && !active.has(sets)) return -1;
+
+  return 0;
 }
 
 export function conditionLabel(condition: FieldCondition): string {
@@ -350,7 +378,7 @@ function unpairedWeather(members: TeamMember[]): UnpairedWeather {
 
 export function unpairedWeatherPenalty(members: TeamMember[]): number {
   const {setterOnly, dependents} = unpairedWeather(members);
-  return setterOnly.length * 2 + dependents.length * 2;
+  return setterOnly.length * unpairedWeatherCost + dependents.length * unpairedWeatherCost;
 }
 
 export function unpairedWeatherWarnings(members: TeamMember[]): string[] {

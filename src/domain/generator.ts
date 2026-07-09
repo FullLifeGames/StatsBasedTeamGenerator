@@ -3,7 +3,7 @@ import {memberArchetypeFit, setArchetypeScore, statAxes} from './archetype';
 import {inferFormatProfile, emptyRoles} from './formatProfile';
 import {formatTeam} from './importable';
 import {scoreTeam, attachInsights} from './scoring';
-import {buildSetCandidates} from './sets';
+import {bestConditionAbility, bestWeatherFreeAbility, buildSetCandidates} from './sets';
 import {toId} from './id';
 import {detectRoles, detectRolesForMoves} from './roles';
 import {isMegaStone} from './itemConstraints';
@@ -17,8 +17,12 @@ import {
   committedCondition,
   conditionLabel,
   conditionShare,
+  dependsOnMissingWeather,
   fieldConditions,
-  settableConditions
+  memberAbusedConditions,
+  memberSetConditions,
+  settableConditions,
+  teamSetConditions
 } from './weather';
 import type {FieldCondition} from './weather';
 import type {
@@ -162,6 +166,47 @@ function withRequiredMove(member: TeamMember, profile: FormatProfile, moveId: st
   };
 }
 
+function withAbility(member: TeamMember, ability: string, reason: string): TeamMember {
+  if (!ability || toId(ability) === toId(member.set.ability)) return member;
+
+  return {
+    ...member,
+    set: {...member.set, ability},
+    explanation: [...member.explanation, reason]
+  };
+}
+
+/**
+ * Sets are built as members are added, so a Pokemon picked before the weather
+ * setter joined never saw the weather, and one picked before the setter was
+ * dropped kept an ability that now does nothing. Both are settled once the team
+ * is final: take the weather ability if the team has the weather, drop it if not.
+ */
+function refitWeatherAbilities(members: TeamMember[], profile: FormatProfile): TeamMember[] {
+  const conditions = teamSetConditions(members);
+
+  return members.map(member => {
+    if (memberSetConditions(member).size) return member;
+
+    if (dependsOnMissingWeather(member.set.ability, conditions)) {
+      return withAbility(
+        member,
+        bestWeatherFreeAbility(member.stats, profile, conditions),
+        `Switched off ${member.set.ability}, which the team sets no weather for`
+      );
+    }
+
+    if (!conditions.size) return member;
+    if ([...memberAbusedConditions(member)].some(condition => conditions.has(condition))) return member;
+
+    return withAbility(
+      member,
+      bestConditionAbility(member.stats, profile, conditions),
+      `Switched to use the team's weather`
+    );
+  });
+}
+
 /** Guarantees the archetype's defining move exists on the finished team. */
 function enforceTrickRoom(members: TeamMember[], profile: FormatProfile): TeamMember[] {
   if (members.some(member => setHasMove(member.set, trickRoomId))) return members;
@@ -187,7 +232,8 @@ function memberFromStats(
     existingRoles: existingRoleTotals(members),
     itemClause: profile.itemClause,
     usedItems: existingUsedItems(members),
-    archetype
+    archetype,
+    teamConditions: teamSetConditions(members)
   });
 
   return {stats, set: chooseSet(candidates, archetype), explanation};
@@ -642,7 +688,7 @@ export function generateTeam(dataset: StatsDataset, formatId: string, options: G
     beams = advanced;
   }
 
-  const selected = sampleBeams(beams, 1, novelty, rng)[0]?.members ?? [];
+  const selected = refitWeatherAbilities(sampleBeams(beams, 1, novelty, rng)[0]?.members ?? [], profile);
   const withArchetypeMoves = options.archetype === 'trick-room' ? enforceTrickRoom(selected, profile) : selected;
   const members = applyLead(withArchetypeMoves, dataset, profile);
   const score = scoreTeam(members, dataset, profile, options.archetype);
