@@ -71,7 +71,7 @@ export function detectRolesForMoves(stats: PokemonStats, profile: FormatProfile,
   roles.status = weightedMoveScore(moves, statusMoves);
   roles.itemDisruption = weightedMoveScore(moves, itemDisruptionMoves);
 
-  roles.hazardPreservation = stats.id.includes('gholdengo') ? 0.8 : abilityShare(stats, ['goodasgold']) * 0.8;
+  roles.hazardPreservation = abilityShare(stats, ['goodasgold']) * 0.8;
   roles.weatherTerrainSetter = abilityShare(stats, weatherTerrainSetterAbilities) * 0.8;
   roles.weatherTerrainAbuser = Math.max(
     abilityShare(stats, weatherTerrainAbuserAbilities) * 0.8,
@@ -93,6 +93,47 @@ export function detectRolesForMoves(stats: PokemonStats, profile: FormatProfile,
   return roles;
 }
 
+/**
+ * Whole-movepool roles are asked for many times per generation, once per sort
+ * comparison in the candidate pool, and the answer never changes for a given
+ * stats object. Keyed by battle style because boardControl depends on it.
+ */
+const wholePokemonRoleCache = new WeakMap<PokemonStats, Map<string, RoleScores>>();
+const singleMoveRoleCache = new WeakMap<PokemonStats, Map<string, RoleScores>>();
+
+/**
+ * Move weighting asks for the roles of one move at a time, for every move of
+ * every candidate the beam search builds a set for, so the answers are cached
+ * on the stats object.
+ */
+export function detectRolesForMove(stats: PokemonStats, profile: FormatProfile, moveId: string): RoleScores {
+  const key = `${profile.gen}:${profile.battleStyle}:${moveId}`;
+  let byProfile = singleMoveRoleCache.get(stats);
+  if (!byProfile) {
+    byProfile = new Map();
+    singleMoveRoleCache.set(stats, byProfile);
+  }
+
+  const cached = byProfile.get(key);
+  if (cached) return cached;
+
+  const roles = detectRolesForMoves(stats, profile, [moveId]);
+  byProfile.set(key, roles);
+  return roles;
+}
+
 export function detectRoles(stats: PokemonStats, profile: FormatProfile): RoleScores {
-  return detectRolesForMoves(stats, profile, Object.keys(stats.moves));
+  const key = `${profile.gen}:${profile.battleStyle}`;
+  let byProfile = wholePokemonRoleCache.get(stats);
+  if (!byProfile) {
+    byProfile = new Map();
+    wholePokemonRoleCache.set(stats, byProfile);
+  }
+
+  const cached = byProfile.get(key);
+  if (cached) return cached;
+
+  const roles = detectRolesForMoves(stats, profile, Object.keys(stats.moves));
+  byProfile.set(key, roles);
+  return roles;
 }

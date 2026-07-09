@@ -5,7 +5,7 @@ import {toId} from './id';
 import {unsupportedTerrainSeedWarnings} from './fieldSupport';
 import {leadScore} from './leads';
 import {megaStonePenalty, multipleMegaStoneWarnings} from './itemConstraints';
-import {usageWeight} from './usageProfile';
+import {topUsage, usageWeight} from './usageProfile';
 import {
   abuserCount,
   committedCondition,
@@ -21,6 +21,7 @@ import type {
   Archetype,
   FormatProfile,
   GeneratedTeam,
+  PokemonStats,
   RoleScores,
   ScoreBreakdown,
   StatsDataset,
@@ -67,22 +68,22 @@ function average(values: number[]): number {
  * Chaos teammate weights are excess co-occurrence counts, so they scale with
  * how often the holder was used. Dividing by the holder's own sample size
  * turns that into a rate, which keeps raw counts from dominating without
- * making rarity itself look like synergy.
+ * making rarity itself look like synergy. Negative weights are kept: two
+ * Pokemon seen together less often than chance are an anti-pair, and that is
+ * as much signal as a positive one.
  */
-function teammateScore(a: TeamMember, b: TeamMember): number {
+function teammateRate(a: TeamMember, b: TeamMember): number {
   const weight = a.stats.teammates[b.stats.id] ?? 0;
-  if (weight <= 0) return 0;
+  if (weight === 0) return 0;
 
-  return Math.min(1, weight / Math.max(a.stats.rawCount, 1));
+  return clamp(weight / Math.max(a.stats.rawCount, 1), -1, 1);
 }
 
 function pairSynergy(a: TeamMember, b: TeamMember): number {
-  const score = average([
-    teammateScore(a, b),
-    teammateScore(b, a)
-  ].filter(value => value > 0));
+  const rates = [teammateRate(a, b), teammateRate(b, a)].filter(value => value !== 0);
+  if (!rates.length) return 0;
 
-  return clamp(score * 20, 0, 3);
+  return clamp(average(rates) * 20, -3, 3);
 }
 
 export function synergyInsights(members: TeamMember[]): SynergyInsight[] {
@@ -91,7 +92,7 @@ export function synergyInsights(members: TeamMember[]): SynergyInsight[] {
   for (let i = 0; i < members.length; i += 1) {
     for (let j = i + 1; j < members.length; j += 1) {
       const score = pairSynergy(members[i], members[j]);
-      if (score > 0) {
+      if (score !== 0) {
         insights.push({
           a: members[i].stats.id,
           b: members[j].stats.id,
@@ -117,24 +118,58 @@ export function membersWithCounterData(members: TeamMember[]): number {
   return members.filter(member => member.stats.checks.length > 0).length;
 }
 
+/**
+ * The beam search scores hundreds of candidate teams per generation and each
+ * scoring asks for the top threats, so the usage sort is done once per dataset
+ * rather than once per call.
+ */
+const usageSortedCache = new WeakMap<StatsDataset, PokemonStats[]>();
+
+function usageSortedPokemon(dataset: StatsDataset): PokemonStats[] {
+  const cached = usageSortedCache.get(dataset);
+  if (cached) return cached;
+
+  const sorted = [...dataset.pokemon].sort((a, b) => b.usage - a.usage);
+  usageSortedCache.set(dataset, sorted);
+  return sorted;
+}
+
+/** Checks edges indexed by target, so a threat lookup is not a linear scan. */
+const checksByTargetCache = new WeakMap<PokemonStats, Map<string, PokemonStats['checks'][number]>>();
+
+function checkEdgeAgainst(stats: PokemonStats, target: string): PokemonStats['checks'][number] | undefined {
+  let byTarget = checksByTargetCache.get(stats);
+  if (!byTarget) {
+    byTarget = new Map(stats.checks.map(edge => [edge.target, edge]));
+    checksByTargetCache.set(stats, byTarget);
+  }
+
+  return byTarget.get(target);
+}
+
 export function threatCoverage(members: TeamMember[], dataset: StatsDataset, limit = 24): ThreatCoverage[] {
   if (!membersWithCounterData(members)) return [];
 
   const teamIds = new Set(members.map(member => member.stats.id));
-  const threats = dataset.pokemon
-    .filter(stats => !teamIds.has(stats.id))
-    .sort((a, b) => b.usage - a.usage)
-    .slice(0, limit);
+  const threats: PokemonStats[] = [];
+  for (const stats of usageSortedPokemon(dataset)) {
+    if (teamIds.has(stats.id)) continue;
+    threats.push(stats);
+    if (threats.length === limit) break;
+  }
 
   return threats.map(threat => {
     const answers = members
-      .flatMap(member => member.stats.checks
-        .filter(edge => edge.target === threat.id)
-        .map(edge => ({
-          pokemonId: member.stats.id,
-          pokemonName: member.stats.name,
-          confidence: roundScore(confidenceForThreat(edge))
-        })))
+      .flatMap(member => {
+        const edge = checkEdgeAgainst(member.stats, threat.id);
+        return edge
+          ? [{
+            pokemonId: member.stats.id,
+            pokemonName: member.stats.name,
+            confidence: roundScore(confidenceForThreat(edge))
+          }]
+          : [];
+      })
       .filter(answer => answer.confidence > 0)
       .sort((a, b) => b.confidence - a.confidence);
 
@@ -149,7 +184,7 @@ export function threatCoverage(members: TeamMember[], dataset: StatsDataset, lim
 }
 
 function usageScore(members: TeamMember[], dataset: StatsDataset): number {
-  const maxUsage = Math.max(...dataset.pokemon.map(stats => stats.usage), 1);
+  const maxUsage = Math.max(topUsage(dataset), 1);
   const weight = usageWeight(dataset);
   return clamp(average(members.map(member => member.stats.usage / maxUsage)) * weight, 0, weight);
 }
@@ -264,8 +299,41 @@ function setToTeamFitScore(members: TeamMember[], profile: FormatProfile): numbe
   return clamp(clamp(reward, -6, 5) - penalty, -12, 5);
 }
 
+/**
+ * Averaged over every pair on the team, not only the pairs that have synergy.
+ * Averaging the non-zero pairs let one strong pair carry five strangers to the
+ * same score as a team where everything supports everything.
+ */
 function synergyScore(members: TeamMember[]): number {
-  return clamp(average(synergyInsights(members).map(insight => insight.score)), 0, 3);
+  const pairCount = (members.length * (members.length - 1)) / 2;
+  if (pairCount <= 0) return 0;
+
+  const total = synergyInsights(members).reduce((sum, insight) => sum + insight.score, 0);
+  return clamp(total / pairCount, -3, 3);
+}
+
+/**
+ * Stacking one type concentrates shared weaknesses. Two of a type is a normal
+ * core; each member beyond that costs a little. The penalty is deliberately
+ * mild so rain teams may still run their third Water type when it earns it.
+ */
+function typeBalanceScore(members: TeamMember[], profile: FormatProfile): number {
+  const counts = new Map<string, number>();
+
+  for (const member of members) {
+    const species = Dex.forGen(profile.gen).species.get(member.stats.name);
+    if (!species.exists) continue;
+    for (const type of species.types) {
+      counts.set(type, (counts.get(type) ?? 0) + 1);
+    }
+  }
+
+  let penalty = 0;
+  for (const count of counts.values()) {
+    penalty += Math.max(0, count - 2) * 0.5;
+  }
+
+  return penalty > 0 ? clamp(-penalty, -2, 0) : 0;
 }
 
 function threatScore(members: TeamMember[], dataset: StatsDataset): number {
@@ -369,7 +437,7 @@ export function scoreTeam(
     synergy: synergyScore(members),
     roles: roleScore(members, profile),
     threats: threatScore(members, dataset),
-    typeBalance: 0,
+    typeBalance: typeBalanceScore(members, profile),
     setToTeamFit: setToTeamFitScore(members, profile),
     duplicateRoles: duplicateRoleScore(members, profile),
     archetype: archetypeScore(members, profile, archetype),
@@ -385,7 +453,7 @@ export function scoreTeam(
     synergy: roundScore(scores.synergy),
     roles: roundScore(scores.roles),
     threats: roundScore(scores.threats),
-    typeBalance: scores.typeBalance,
+    typeBalance: roundScore(scores.typeBalance),
     setToTeamFit: roundScore(scores.setToTeamFit),
     duplicateRoles: roundScore(scores.duplicateRoles),
     archetype: roundScore(scores.archetype),

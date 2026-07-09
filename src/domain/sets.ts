@@ -1,7 +1,7 @@
 import {Dex} from '@pkmn/dex';
 import {abilityBias, itemBias, roleAffinity, spreadBias} from './archetype';
 import {toId} from './id';
-import {detectRolesForMoves} from './roles';
+import {detectRolesForMove, detectRolesForMoves} from './roles';
 import {abilityConditionBias, dependsOnMissingWeather} from './weather';
 import type {FieldCondition} from './weather';
 import type {Archetype, AnalysisSetTemplate, FormatProfile, PokemonStats, RoleScores, SetCandidate, WeightedTable} from './types';
@@ -222,7 +222,7 @@ function adjustedMoveWeight(
   selectedItemId: string,
   context?: TeamContext
 ): number {
-  const roles = detectRolesForMoves(stats, profile, [moveId]);
+  const roles = detectRolesForMove(stats, profile, moveId);
   let weight = stats.moves[moveId] ?? 0;
   const itemId = toId(selectedItemId);
   const isChoiceLocked = choiceItemIds.has(itemId);
@@ -387,8 +387,20 @@ function analysisCandidate(stats: PokemonStats, profile: FormatProfile, template
   if (!moveIds.length) return null;
   const usedAbilityId = topEntries(realAbilities(stats))[0]?.[0] ?? '';
   const abilityId = resolveAbilityId(profile, stats, template.ability ? toId(template.ability) : usedAbilityId);
-  const itemId = template.item ? toId(template.item) : topEntries(stats.items)[0]?.[0] ?? '';
+  // The same legality filter as the stats path: without it, a template with no
+  // item falls back to the raw items table, whose top entry in Gens 1 and 2 is
+  // literally `nothing`, and the import reads "Tauros @ Nothing".
+  const itemId = legalItemId(profile, template.item ? toId(template.item) : topEntries(stats.items)[0]?.[0] ?? '');
   const teraTypeId = template.teraType ? toId(template.teraType) : topEntries(stats.teraTypes)[0]?.[0] ?? '';
+  // A curated set is trustworthy, but a fixed confidence of 1 made the Sets
+  // score carry no information wherever analyses exist. The floor keeps the
+  // curation credit; the rest grades how close the set is to what is played.
+  const moveWeight = moveIds.reduce((sum, moveId) => sum + (stats.moves[moveId] ?? 0), 0);
+  const alignment = average([
+    tableShare(stats.abilities, stats.abilities[abilityId] ?? 0),
+    tableShare(stats.items, stats.items[itemId] ?? 0),
+    tableShare(stats.moves, moveWeight)
+  ]);
 
   return {
     pokemonId: stats.id,
@@ -401,7 +413,7 @@ function analysisCandidate(stats: PokemonStats, profile: FormatProfile, template
     evs: formatTemplateEvs(template.evs),
     moves: moveIds.map(moveId => dexDisplay(profile, 'move', moveId)),
     roles: detectRolesForMoves(stats, profile, moveIds),
-    confidence: 1,
+    confidence: 0.5 + 0.5 * alignment,
     source: 'analysis',
     setName: template.name,
     sourceWeights: {
@@ -416,11 +428,18 @@ function analysisCandidate(stats: PokemonStats, profile: FormatProfile, template
 
 function selectedMoveIds(stats: PokemonStats, profile: FormatProfile, selectedItemId: string, context?: TeamContext): string[] {
   const moveTotal = tableTotal(stats.moves);
+  // Weighed once per move, not once per sort comparison: the adjustment runs
+  // role detection, and this function is called for every candidate the beam
+  // search evaluates.
+  const weights = new Map(Object.keys(stats.moves).map(moveId => [
+    moveId,
+    adjustedMoveWeight(stats, profile, moveId, moveTotal, selectedItemId, context)
+  ]));
   const selected: string[] = [];
   let hasHiddenPower = false;
 
   for (const moveId of Object.keys(stats.moves)
-    .sort((a, b) => adjustedMoveWeight(stats, profile, b, moveTotal, selectedItemId, context) - adjustedMoveWeight(stats, profile, a, moveTotal, selectedItemId, context))) {
+    .sort((a, b) => (weights.get(b) ?? 0) - (weights.get(a) ?? 0))) {
     if (moveId.startsWith('hiddenpower')) {
       if (hasHiddenPower) continue;
       hasHiddenPower = true;
@@ -465,6 +484,25 @@ export function bestConditionAbility(stats: PokemonStats, profile: FormatProfile
 }
 
 /**
+ * Recomputes a set's confidence from what it actually runs now. Post-selection
+ * passes (weather refit, forced Trick Room) swap an ability or a move, and the
+ * confidence chosen at build time would otherwise describe the old set. The EV
+ * spread is not recoverable from a finished set, so the measurable parts are
+ * graded and analysis sets keep their curation floor.
+ */
+export function refreshedConfidence(stats: PokemonStats, set: SetCandidate): number {
+  const moveWeight = set.moves.reduce((sum, move) => sum + (stats.moves[toId(move)] ?? 0), 0);
+  const alignment = average([
+    tableShare(stats.abilities, stats.abilities[toId(set.ability)] ?? 0),
+    tableShare(stats.items, stats.items[toId(set.itemId ?? set.item)] ?? 0),
+    tableShare(stats.teraTypes, stats.teraTypes[toId(set.teraType ?? '')] ?? 0),
+    tableShare(stats.moves, moveWeight)
+  ]);
+
+  return set.source === 'analysis' ? 0.5 + 0.5 * alignment : alignment;
+}
+
+/**
  * The most-used ability that does not depend on weather the team never brings.
  * Sand Rush with no sandstorm is a dead slot; Mold Breaker is not.
  */
@@ -487,11 +525,17 @@ export function buildSetCandidates(stats: PokemonStats, profile: FormatProfile, 
 
   const archetype = context?.archetype;
   const teamConditions = context?.teamConditions ?? new Set<FieldCondition>();
-  const [abilityId, abilityWeight] = pickBiased(
-    stats.abilities,
-    id => (archetype ? abilityBias(id, archetype) : 0) + abilityConditionBias(id, teamConditions),
-    isRealAbility
-  );
+  // The weather ability is decided by the same rule (and the same share floor)
+  // as the end-of-generation refit, so whether a Pokemon joined before or after
+  // the weather setter cannot change which ability it ends up with.
+  const conditionAbilityId = toId(bestConditionAbility(stats, profile, teamConditions));
+  const [abilityId, abilityWeight] = conditionAbilityId
+    ? ([conditionAbilityId, stats.abilities[conditionAbilityId] ?? 0] as [string, number])
+    : pickBiased(
+      stats.abilities,
+      id => (archetype ? abilityBias(id, archetype) : 0) + abilityConditionBias(id, teamConditions),
+      isRealAbility
+    );
   const usedItemIds = new Set([...(context?.usedItems ?? new Set<string>())].map(toId));
   const [selectedItemId, itemWeight] = pickBiased(stats.items, id => archetype ? itemBias(id, archetype) : 0, candidateItemId => {
     const legalItem = legalItemId(profile, candidateItemId);

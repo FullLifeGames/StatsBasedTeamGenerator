@@ -251,6 +251,11 @@ export function dependsOnMissingWeather(ability: string, active: Set<FieldCondit
   return Boolean(condition) && !active.has(condition);
 }
 
+/** The condition this ability sets on switch-in, or null for a normal ability. */
+export function abilitySetCondition(ability: string): FieldCondition | null {
+  return setterAbilities[toId(ability)] ?? null;
+}
+
 export function abilityConditionBias(ability: string, active: Set<FieldCondition>): number {
   const id = toId(ability);
   if (!id) return 0;

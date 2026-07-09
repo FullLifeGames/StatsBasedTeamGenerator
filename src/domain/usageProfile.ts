@@ -5,7 +5,7 @@ const openMetagameUsage = 30;
 const standardizedMetagameUsage = 70;
 
 const concentrationCache = new WeakMap<StatsDataset, number>();
-const floorCache = new WeakMap<StatsDataset, number>();
+const topUsageCache = new WeakMap<StatsDataset, number>();
 const eligibleCache = new WeakMap<StatsDataset, Set<string>>();
 const usageFloorShare = 0.05;
 const minimumEligible = 12;
@@ -52,20 +52,23 @@ export function effectiveNovelty(novelty: number, dataset: StatsDataset): number
   return novelty * (1 - noveltyDamping * usageConcentration(dataset));
 }
 
+/** Highest usage in the stats file, the reference point for floors and scoring. */
+export function topUsage(dataset: StatsDataset): number {
+  const cached = topUsageCache.get(dataset);
+  if (cached !== undefined) return cached;
+
+  const top = dataset.pokemon.reduce((best, stats) => Math.max(best, stats.usage), 0);
+  topUsageCache.set(dataset, top);
+  return top;
+}
+
 /**
  * Lowest usage a Pokemon needs before the generator will consider it. Keeps
  * exploration inside the Pokemon a format actually plays: a Pokemon at 5% of
  * the most-used Pokemon's share is a niche pick, not a flex slot.
  */
 export function usageFloor(dataset: StatsDataset): number {
-  const cached = floorCache.get(dataset);
-  if (cached !== undefined) return cached;
-
-  const topUsage = dataset.pokemon.reduce((best, stats) => Math.max(best, stats.usage), 0);
-  const floor = topUsage * usageFloorShare;
-
-  floorCache.set(dataset, floor);
-  return floor;
+  return topUsage(dataset) * usageFloorShare;
 }
 
 /**

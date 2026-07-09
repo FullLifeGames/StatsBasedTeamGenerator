@@ -19,8 +19,11 @@ The current deployment is available at https://teamgen.fulllifegames.com/.
 - Team generation from usage, checks/counters, teammate synergy, and role needs.
 - Seven archetypes, from hyper offense to stall, that reshape which teams score well.
 - Sets adapt to the archetype and the team: moves, item, ability, and EV spread.
-- Weather teams commit to one condition and pair its setter with matching abusers.
+- Weather teams commit to one condition and pair its setter with matching abusers,
+  and rerolls vary which weather gets committed.
 - Unpaired weather is penalized: Drizzle without Swift Swim, and Swift Swim without Drizzle.
+- Synergy counts every pair on the team, including the pairs the stats say avoid each other.
+- Stacking one type beyond a core of two costs points.
 - Standardized formats such as Gen 1 OU lean harder on their near-mandatory usage.
 - Seeded sampling varies teams across rerolls without reaching for niche Pokemon.
 - Gen 1 to 4 teams are scored on their lead and import it in the first slot.

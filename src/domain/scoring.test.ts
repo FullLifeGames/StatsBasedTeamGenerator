@@ -130,6 +130,45 @@ describe('scoreTeam', () => {
     expect(commonScore).toBe(nicheScore);
   });
 
+  it('dilutes synergy across every pair instead of averaging only the good ones', () => {
+    const a = makePokemon({id: 'a', name: 'A', rawCount: 1000, teammates: {b: 500}});
+    const b = makePokemon({id: 'b', name: 'B', rawCount: 1000, teammates: {a: 500}});
+    const strangerC = makePokemon({id: 'c', name: 'C'});
+    const strangerD = makePokemon({id: 'd', name: 'D'});
+    const dataset = makeDataset([a, b, strangerC, strangerD]);
+    const profile = inferFormatProfile('gen9ou');
+
+    const core = scoreTeam([member(a), member(b)], dataset, profile).synergy;
+    const diluted = scoreTeam([member(a), member(b), member(strangerC), member(strangerD)], dataset, profile).synergy;
+
+    expect(core).toBeGreaterThan(0);
+    expect(diluted).toBeLessThan(core);
+  });
+
+  it('counts anti-pairs against the synergy score', () => {
+    // Chaos teammate weights go negative for Pokemon seen together less often
+    // than chance, which is a reason not to put them on one team.
+    const a = makePokemon({id: 'a', name: 'A', rawCount: 1000, teammates: {b: -400}});
+    const b = makePokemon({id: 'b', name: 'B', rawCount: 1000, teammates: {a: -400}});
+    const dataset = makeDataset([a, b]);
+
+    expect(scoreTeam([member(a), member(b)], dataset, inferFormatProfile('gen9ou')).synergy).toBeLessThan(0);
+  });
+
+  it('penalizes stacking a type beyond a core of two', () => {
+    const azumarill = makePokemon({id: 'azumarill', name: 'Azumarill', moves: {playrough: 100, aquajet: 90}});
+    const dondozo = makePokemon({id: 'dondozo', name: 'Dondozo', moves: {liquidation: 100, rest: 90}});
+    const barraskewda = makePokemon({id: 'barraskewda', name: 'Barraskewda', moves: {liquidation: 100, closecombat: 90}});
+    const dataset = makeDataset([azumarill, dondozo, barraskewda]);
+    const profile = inferFormatProfile('gen9ou');
+
+    const twoWaters = scoreTeam([member(azumarill), member(dondozo)], dataset, profile);
+    const threeWaters = scoreTeam([member(azumarill), member(dondozo), member(barraskewda)], dataset, profile);
+
+    expect(twoWaters.typeBalance).toBe(0);
+    expect(threeWaters.typeBalance).toBeLessThan(0);
+  });
+
   it('does not treat a rarely used Pokemon as a better teammate than a staple', () => {
     const anchor = makePokemon({id: 'anchor', name: 'Anchor', usage: 90, rawCount: 9000, teammates: {staple: 900, rare: 90}});
     const staple = makePokemon({id: 'staple', name: 'Staple', usage: 40, rawCount: 4000, teammates: {anchor: 900}});

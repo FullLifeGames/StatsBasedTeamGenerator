@@ -3,7 +3,7 @@ import {memberArchetypeFit, setArchetypeScore, statAxes} from './archetype';
 import {inferFormatProfile, emptyRoles} from './formatProfile';
 import {formatTeam} from './importable';
 import {scoreTeam, attachInsights} from './scoring';
-import {bestConditionAbility, bestWeatherFreeAbility, buildSetCandidates} from './sets';
+import {bestConditionAbility, bestWeatherFreeAbility, buildSetCandidates, refreshedConfidence} from './sets';
 import {toId} from './id';
 import {detectRoles, detectRolesForMoves} from './roles';
 import {isMegaStone} from './itemConstraints';
@@ -12,6 +12,7 @@ import {createRng, sampleByScore, samplingTemperature} from './sampling';
 import type {Rng} from './sampling';
 import {effectiveNovelty, isEligible} from './usageProfile';
 import {
+  abilitySetCondition,
   abusedConditions,
   bestConditionShare,
   committedCondition,
@@ -20,7 +21,6 @@ import {
   dependsOnMissingWeather,
   fieldConditions,
   memberAbusedConditions,
-  memberSetConditions,
   settableConditions,
   teamSetConditions
 } from './weather';
@@ -101,14 +101,35 @@ function canAddMember(members: TeamMember[], candidate: TeamMember, profile: For
   return !memberHasMegaStone(candidate, profile) || !members.some(member => memberHasMegaStone(member, profile));
 }
 
-function sortedPokemon(dataset: StatsDataset, novelty: number, randomSeed?: number): PokemonStats[] {
-  const noveltyWeight = Math.max(0, Math.min(1, novelty));
+/**
+ * Novelty and seed are fixed for a whole generation while this ordering is
+ * asked for by every beam at every slot, so it is computed once per dataset
+ * with the scores decorated up front instead of hashed inside the comparator.
+ */
+const sortedPokemonCache = new WeakMap<StatsDataset, Map<string, PokemonStats[]>>();
 
-  return [...dataset.pokemon].sort((a, b) => {
-    const aScore = a.usage * (1 - noveltyWeight) + a.viability * noveltyWeight + seededNoise(a.id, randomSeed) * noveltyWeight;
-    const bScore = b.usage * (1 - noveltyWeight) + b.viability * noveltyWeight + seededNoise(b.id, randomSeed) * noveltyWeight;
-    return bScore - aScore;
-  });
+function sortedPokemon(dataset: StatsDataset, novelty: number, randomSeed?: number): PokemonStats[] {
+  const cacheKey = `${novelty}:${randomSeed ?? 'none'}`;
+  let byOptions = sortedPokemonCache.get(dataset);
+  if (!byOptions) {
+    byOptions = new Map();
+    sortedPokemonCache.set(dataset, byOptions);
+  }
+
+  const cached = byOptions.get(cacheKey);
+  if (cached) return cached;
+
+  const noveltyWeight = Math.max(0, Math.min(1, novelty));
+  const sorted = dataset.pokemon
+    .map(stats => ({
+      stats,
+      score: stats.usage * (1 - noveltyWeight) + stats.viability * noveltyWeight + seededNoise(stats.id, randomSeed) * noveltyWeight
+    }))
+    .sort((a, b) => b.score - a.score)
+    .map(entry => entry.stats);
+
+  byOptions.set(cacheKey, sorted);
+  return sorted;
 }
 
 const trickRoomId = 'trickroom';
@@ -159,9 +180,10 @@ function withRequiredMove(member: TeamMember, profile: FormatProfile, moveId: st
   );
   moves[weakest.index] = move.name;
 
+  const set = {...member.set, moves, roles: detectRolesForMoves(member.stats, profile, moves.map(toId))};
   return {
     ...member,
-    set: {...member.set, moves, roles: detectRolesForMoves(member.stats, profile, moves.map(toId))},
+    set: {...set, confidence: refreshedConfidence(member.stats, set)},
     explanation: [...member.explanation, explanation]
   };
 }
@@ -169,9 +191,10 @@ function withRequiredMove(member: TeamMember, profile: FormatProfile, moveId: st
 function withAbility(member: TeamMember, ability: string, reason: string): TeamMember {
   if (!ability || toId(ability) === toId(member.set.ability)) return member;
 
+  const set = {...member.set, ability};
   return {
     ...member,
-    set: {...member.set, ability},
+    set: {...set, confidence: refreshedConfidence(member.stats, set)},
     explanation: [...member.explanation, reason]
   };
 }
@@ -179,14 +202,18 @@ function withAbility(member: TeamMember, ability: string, reason: string): TeamM
 /**
  * Sets are built as members are added, so a Pokemon picked before the weather
  * setter joined never saw the weather, and one picked before the setter was
- * dropped kept an ability that now does nothing. Both are settled once the team
- * is final: take the weather ability if the team has the weather, drop it if not.
+ * dropped kept an ability that now does nothing. Both are settled against the
+ * team's current weather: take the weather ability if the team has the weather,
+ * drop it if not. A setter ability is never touched — switching Pelipper off
+ * Drizzle onto Rain Dish would abuse a rain that no longer exists — but a
+ * Pokemon that sets weather by move is still free to take the matching ability,
+ * which is what puts Swift Swim on a Rain Dance user.
  */
 function refitWeatherAbilities(members: TeamMember[], profile: FormatProfile): TeamMember[] {
   const conditions = teamSetConditions(members);
 
   return members.map(member => {
-    if (memberSetConditions(member).size) return member;
+    if (abilitySetCondition(member.set.ability)) return member;
 
     if (dependsOnMissingWeather(member.set.ability, conditions)) {
       return withAbility(
@@ -357,16 +384,20 @@ function candidatePool(
   archetype: Archetype,
   members: TeamMember[]
 ): PokemonStats[] {
+  const withTrickRoom = teamHasTrickRoom(members);
+
+  // Scores are decorated before sorting because both of them run role
+  // detection, which is far too expensive to recompute per comparison.
   return withUsageFloor(dataset, sortedPokemon(dataset, novelty, randomSeed)
     .filter(stats => !selectedIds.has(toId(stats.id)) && !selectedSpecies.has(speciesKey(stats, profile))))
-    .sort((a, b) => {
-      const trickRoomDelta = teamHasTrickRoom(members)
-        ? trickRoomComplementScore(b, profile) - trickRoomComplementScore(a, profile)
-        : 0;
-      const roleDelta = roleScoreForArchetype(b, profile, archetype, members) - roleScoreForArchetype(a, profile, archetype, members);
-      return trickRoomDelta || roleDelta || 0;
-    })
-    .slice(0, candidateLimit);
+    .map(stats => ({
+      stats,
+      trickRoom: withTrickRoom ? trickRoomComplementScore(stats, profile) : 0,
+      role: roleScoreForArchetype(stats, profile, archetype, members)
+    }))
+    .sort((a, b) => (b.trickRoom - a.trickRoom) || (b.role - a.role))
+    .slice(0, candidateLimit)
+    .map(entry => entry.stats);
 }
 
 function availableStats(
@@ -469,7 +500,7 @@ function planWeather(
   const candidates = withUsageFloor(dataset, availableStats(dataset, profile, members, bannedIds), true);
   const existing = committedCondition(members);
   const conditions = existing ? [existing] : fieldConditions;
-  let best: (WeatherPlan & {fit: number}) | null = null;
+  const plans: Array<WeatherPlan & {fit: number}> = [];
 
   for (const condition of conditions) {
     const setter = existing ? null : bestByCondition(candidates, condition, settableConditions);
@@ -479,15 +510,18 @@ function planWeather(
     const abuser = bestByCondition(abuserPool, condition, abusedConditions);
     if (!abuser) continue;
 
-    const fit = (setter?.fit ?? 0) + abuser.fit;
-    if (!best || fit > best.fit) {
-      best = {condition, setter: setter?.stats ?? null, abuser: abuser.stats, fit};
-    }
+    plans.push({condition, setter: setter?.stats ?? null, abuser: abuser.stats, fit: (setter?.fit ?? 0) + abuser.fit});
   }
 
-  // The condition is committed on its strongest pairing, but which abuser fills
-  // the anchor slot is sampled so rerolls do not always open the same two.
-  if (best) return {...best, abuser: sampledAbuser(candidates, best, novelty, rng)};
+  // The committed condition is sampled across the viable pairings, weighted by
+  // their strength, and the abuser inside the chosen pairing is sampled again.
+  // Taking the single strongest pairing outright made every reroll of the
+  // weather archetype open with the same weather and the same setter.
+  if (plans.length) {
+    const temperature = samplingTemperature(plans.map(plan => plan.fit), novelty);
+    const chosen = sampleByScore(plans, 1, plan => plan.fit, temperature, rng)[0];
+    return {...chosen, abuser: sampledAbuser(candidates, chosen, novelty, rng)};
+  }
   if (existing) return null;
 
   const fallback = fieldConditions
@@ -623,7 +657,11 @@ function advanceBeams(
       ], archetype);
       if (!canAddMember(beam.members, member, profile)) continue;
 
-      const members = [...beam.members, member];
+      // Refit weather abilities at every step, not just at the end, so the
+      // search judges each partial team the way the finished team will be
+      // judged: a dead weather ability the final pass would fix must not sink
+      // the beam that carries it.
+      const members = refitWeatherAbilities([...beam.members, member], profile);
       const score = scoreTeam(members, dataset, profile, archetype).total;
       next.push({members, score, marginal: score - beam.score});
     }
@@ -677,9 +715,12 @@ export function generateTeam(dataset: StatsDataset, formatId: string, options: G
     novelty,
     rng
   );
+  // The starting score has to be the real score of the starting members, or
+  // the first advance's marginal gains would carry the anchors' whole absolute
+  // score inside them.
   let beams: Beam[] = [{
     members: initialMembers,
-    score: 0
+    score: scoreTeam(initialMembers, dataset, profile, options.archetype).total
   }];
 
   while (beams[0]?.members.length < targetSize) {

@@ -38,7 +38,11 @@ export function InsightPanel({team}: InsightPanelProps) {
     );
   }
 
-  const visibleScores = team.score.leads > 0 ? [...scoreLabels, ['leads', 'Lead'] as const] : scoreLabels;
+  const visibleScores = [
+    ...scoreLabels,
+    ...(team.score.typeBalance !== 0 ? [['typeBalance', 'Types'] as const] : []),
+    ...(team.score.leads > 0 ? [['leads', 'Lead'] as const] : [])
+  ];
   const coveredThreats = team.threats.filter(threat => threat.covered).length;
   const hasThreatCoverage = team.threats.length > 0;
   const membersWithData = membersWithCounterData(team.members);

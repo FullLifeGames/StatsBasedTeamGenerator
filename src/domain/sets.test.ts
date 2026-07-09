@@ -2,6 +2,7 @@ import {describe, expect, it} from 'vitest';
 import {makePokemon} from '../test/fixtures';
 import {inferFormatProfile} from './formatProfile';
 import {buildSetCandidates, scoreSetForTeamContext} from './sets';
+import type {FieldCondition} from './weather';
 
 const greatTuskStats = makePokemon({
   id: 'greattusk',
@@ -51,6 +52,41 @@ describe('buildSetCandidates ability resolution', () => {
   it('leaves abilities empty in generations before they existed', () => {
     const tauros = makePokemon({id: 'tauros', name: 'Tauros', moves: {bodyslam: 100, hyperbeam: 90}});
     expect(buildSetCandidates(tauros, inferFormatProfile('gen1ou'))[0].ability).toBe('');
+  });
+
+  it('gives a rain team member its rarely played rain ability at build time', () => {
+    // The same share floor as the end-of-generation refit: 3.7% Swift Swim is
+    // a real choice on a rain team even though the generic set pick would
+    // dismiss anything under 4% as unplayed.
+    const basculegion = makePokemon({
+      id: 'basculegion',
+      name: 'Basculegion',
+      abilities: {adaptability: 963, swiftswim: 37},
+      items: {choiceband: 100},
+      moves: {wavecrash: 100, lastrespects: 95, aquajet: 90, flipturn: 85}
+    });
+
+    const [candidate] = buildSetCandidates(basculegion, inferFormatProfile('gen9ou'), {
+      teamConditions: new Set<FieldCondition>(['rain'])
+    });
+
+    expect(candidate.ability).toBe('Swift Swim');
+  });
+
+  it('does not force a weather ability the format never plays, even on a matching team', () => {
+    const whimsicott = makePokemon({
+      id: 'whimsicott',
+      name: 'Whimsicott',
+      abilities: {prankster: 1000},
+      items: {covertcloak: 100},
+      moves: {tailwind: 100, moonblast: 95, encore: 90, protect: 85}
+    });
+
+    const [candidate] = buildSetCandidates(whimsicott, inferFormatProfile('gen9ou'), {
+      teamConditions: new Set<FieldCondition>(['sun'])
+    });
+
+    expect(candidate.ability).toBe('Prankster');
   });
 });
 
@@ -262,6 +298,47 @@ describe('buildSetCandidates', () => {
     expect(candidate.source).toBe('analysis');
     expect(candidate.item).toBe('Loaded Dice');
     expect(candidate.moves).toEqual(['Scale Shot', 'Icicle Spear', 'Earthquake', 'Dragon Dance']);
+  });
+
+  it('never gives an analysis set an item in a generation without items', () => {
+    // Gen 1 templates carry no item, and the raw stats fallback's top entry is
+    // literally `nothing`, which previously rendered as "Tauros @ Nothing".
+    const [candidate] = buildSetCandidates(makePokemon({
+      id: 'tauros',
+      name: 'Tauros',
+      items: {nothing: 1000},
+      moves: {bodyslam: 100, hyperbeam: 95, blizzard: 90, earthquake: 85},
+      analysisSets: [{
+        name: 'Standard',
+        moves: ['Body Slam', 'Hyper Beam', 'Blizzard', 'Earthquake']
+      }]
+    }), inferFormatProfile('gen1ou'));
+
+    expect(candidate.source).toBe('analysis');
+    expect(candidate.item).toBe('');
+    expect(candidate.itemId).toBeUndefined();
+  });
+
+  it('grades an analysis set by how close it stays to what is actually played', () => {
+    const stats = {
+      id: 'baxcalibur',
+      name: 'Baxcalibur',
+      abilities: {thermalexchange: 100},
+      items: {loadeddice: 100},
+      moves: {scaleshot: 100, iciclespear: 95, earthquake: 90, dragondance: 85},
+      teraTypes: {dragon: 100}
+    };
+    const [aligned] = buildSetCandidates(makePokemon({
+      ...stats,
+      analysisSets: [{name: 'Standard', ability: 'Thermal Exchange', item: 'Loaded Dice', moves: ['Scale Shot', 'Icicle Spear', 'Earthquake', 'Dragon Dance']}]
+    }), inferFormatProfile('gen9ou'));
+    const [offMeta] = buildSetCandidates(makePokemon({
+      ...stats,
+      analysisSets: [{name: 'Off-meta', ability: 'Rattled', item: 'Heavy-Duty Boots', moves: ['Ice Beam', 'Surf', 'Blizzard', 'Rest']}]
+    }), inferFormatProfile('gen9ou'));
+
+    expect(aligned.confidence).toBeGreaterThan(offMeta.confidence);
+    expect(offMeta.confidence).toBeGreaterThanOrEqual(0.5);
   });
 });
 

@@ -450,6 +450,37 @@ describe('generateTeam', () => {
     expect(team.score.warnings).toEqual([]);
   });
 
+  it('never switches a setter off its own weather ability', () => {
+    // Pelipper also carries Rain Dish, an abuser of the very rain it sets. The
+    // refit must not trade the Drizzle away for it, or the rain disappears.
+    const dataset = makeDataset([
+      ouPokemon({id: 'pelipper', name: 'Pelipper', usage: 20, abilities: {drizzle: 60, raindish: 40}, moves: {hurricane: 100, uturn: 90, roost: 80, surf: 70}}),
+      ouPokemon({id: 'barraskewda', name: 'Barraskewda', usage: 19, abilities: {swiftswim: 100}, moves: {liquidation: 100, closecombat: 90, flipturn: 80, aquajet: 70}}),
+      ouPokemon({id: 'kingambit', name: 'Kingambit', usage: 18, moves: {kowtowcleave: 100, suckerpunch: 95, ironhead: 80, swordsdance: 70}})
+    ]);
+
+    const team = generateTeam(dataset, 'gen9ou', {seeds: ['Pelipper', 'Barraskewda'], archetype: 'balanced', novelty: 0});
+    const pelipper = team.members.find(member => member.stats.id === 'pelipper')!;
+
+    expect(pelipper.set.ability).toBe('Drizzle');
+  });
+
+  it('gives a Rain Dance setter the ability that uses its own rain', () => {
+    // The rain comes from a move rather than an ability, so the slot is free
+    // for Swift Swim; skipping every member that sets any weather missed this.
+    const dataset = makeDataset([
+      ouPokemon({id: 'floatzel', name: 'Floatzel', usage: 25, abilities: {waterveil: 70, swiftswim: 30}, moves: {raindance: 100, wavecrash: 95, aquajet: 90, crunch: 85}}),
+      ouPokemon({id: 'kingambit', name: 'Kingambit', usage: 20, moves: {kowtowcleave: 100, suckerpunch: 95, ironhead: 80, swordsdance: 70}}),
+      ouPokemon({id: 'skarmory', name: 'Skarmory', usage: 18, abilities: {sturdy: 100}, moves: {roost: 100, spikes: 90, bodypress: 80, whirlwind: 70}})
+    ]);
+
+    const team = generateTeam(dataset, 'gen9ou', {seeds: ['Floatzel'], archetype: 'balanced', novelty: 0});
+    const floatzel = team.members.find(member => member.stats.id === 'floatzel')!;
+
+    expect(floatzel.set.moves).toContain('Rain Dance');
+    expect(floatzel.set.ability).toBe('Swift Swim');
+  });
+
   it('keeps the staples of a standardized format while rotating its flex slots', () => {
     const dataset = standardizedDataset();
 
