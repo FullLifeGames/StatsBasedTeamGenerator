@@ -27,6 +27,7 @@ The current deployment is available at https://teamgen.fulllifegames.com/.
 - Singles-aware hazards, removal, preservation, pivots, and item disruption.
 - Doubles-aware speed control, board positioning, spread pressure, and item clause.
 - Contextual set selection from stats and Smogon analysis templates.
+- Threat coverage that says how much checks and counters data the team actually has.
 - Showdown import text with copy buttons and server-side legality validation.
 - Dark mode and Pokemon sprites through the `@pkmn` ecosystem.
 
