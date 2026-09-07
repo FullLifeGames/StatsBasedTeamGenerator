@@ -3,7 +3,7 @@ import express from 'express';
 import {parseLeads} from '../../src/domain/leads';
 import {normalizeChaos} from '../../src/domain/normalize';
 import {readThroughCache} from './cache';
-import {discoverMonthFormats, discoverStatsIndex, fetchText} from './index';
+import {discoverMonthFormats, discoverStatsIndex, fetchStatsFile, fetchText} from './index';
 import {fetchAnalysisSetTemplates} from './sets';
 import {validateShowdownImport} from './validation';
 
@@ -24,7 +24,8 @@ const defaultDependencies: SmogonRouterDependencies = {
   fetchAnalysisSetTemplates,
   validateShowdownImport
 };
-const chaosCacheVersion = 'v2';
+const chaosCacheVersion = 'v3';
+const leadsCacheVersion = 'v2';
 
 class InvalidStatsJsonError extends Error {
   constructor() {
@@ -103,7 +104,7 @@ export function createSmogonRouter(dependencies: SmogonRouterDependencies = defa
 
     try {
       const rawText = await dependencies.cache(`chaos:${chaosCacheVersion}:${month}:${format}:${cutoffNumber}`, 24 * 60 * 60_000, async () => {
-        const fetchedText = await dependencies.fetchText(url);
+        const fetchedText = await fetchStatsFile(url, dependencies.fetchText);
         parseStatsJson(fetchedText);
         return fetchedText;
       });
@@ -127,9 +128,9 @@ export function createSmogonRouter(dependencies: SmogonRouterDependencies = defa
 
     try {
       const rawText = await dependencies.cache(
-        `leads:${month}:${format}:${cutoffNumber}`,
+        `leads:${leadsCacheVersion}:${month}:${format}:${cutoffNumber}`,
         24 * 60 * 60_000,
-        () => dependencies.fetchText(url)
+        () => fetchStatsFile(url, dependencies.fetchText)
       );
       response.json(parseLeads(rawText));
     } catch (error) {

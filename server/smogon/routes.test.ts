@@ -3,6 +3,7 @@ import express from 'express';
 import type {AddressInfo} from 'node:net';
 import type {Server} from 'node:http';
 import {createSmogonRouter, isValidSetRequest, isValidStatsRequest, isValidValidationRequest} from './routes';
+import {SmogonRequestError} from './index';
 import type {TeamValidation} from '../../src/domain/types';
 
 const passthroughCache = async (_key: string, _ttlMs: number, loader: () => Promise<string>) => loader();
@@ -56,6 +57,24 @@ describe('Smogon stats route validation', () => {
     expect(isValidStatsRequest('2026-03', 'gen9ou', '-1')).toBe(false);
   });
 
+  it('reads chaos data from the gzipped file when the plain json name is gone', async () => {
+    const {body, status} = await requestRouter(routerDependencies({
+      fetchText: async url => {
+        if (url !== 'https://www.smogon.com/stats/2026-06/chaos/gen1ou-1760.json.gz') {
+          throw new SmogonRequestError(url, 404);
+        }
+
+        return JSON.stringify({info: {}, data: {Jynx: {usage: 0.2262514}}});
+      }
+    }), '/api/stats/2026-06/gen1ou/1760');
+
+    expect(status).toBe(200);
+    expect(body).toMatchObject({
+      pokemon: [{id: 'jynx', usage: 22.62514}],
+      source: {url: 'https://www.smogon.com/stats/2026-06/chaos/gen1ou-1760.json'}
+    });
+  });
+
   it('returns a stable error when upstream chaos data is not JSON', async () => {
     const {body, status} = await requestRouter(routerDependencies({
       fetchText: async () => '<!doctype html><title>Bad Gateway</title>'
@@ -70,6 +89,21 @@ describe('Smogon leads route', () => {
   it('parses the leads table into lead usage', async () => {
     const {body, status} = await requestRouter(routerDependencies({
       fetchText: async () => '| 1    | Jynx               | 22.62514% | 6393   | 17.078% |\n'
+    }), '/api/stats/leads/2026-06/gen1ou/1760');
+
+    expect(status).toBe(200);
+    expect(body).toEqual({jynx: 22.62514});
+  });
+
+  it('reads leads from the gzipped file when the plain text name is gone', async () => {
+    const {body, status} = await requestRouter(routerDependencies({
+      fetchText: async url => {
+        if (url !== 'https://www.smogon.com/stats/2026-06/leads/gen1ou-1760.txt.gz') {
+          throw new SmogonRequestError(url, 404);
+        }
+
+        return '| 1    | Jynx               | 22.62514% | 6393   | 17.078% |\n';
+      }
     }), '/api/stats/leads/2026-06/gen1ou/1760');
 
     expect(status).toBe(200);
