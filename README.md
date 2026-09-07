@@ -248,6 +248,11 @@ sudo systemctl restart team-generator
 - `@pkmn/sim` for Showdown-style team validation.
 - `@pkmn/img` for Pokemon sprites.
 
+Smogon stores those stats files gzipped, so the server reads whichever of the
+uncompressed name and the `.gz` name still resolves, and inflates the payload
+whenever the bytes arrive compressed. A browser hides that difference, which is
+why a stats page opens by hand even when a plain HTTP client sees binary.
+
 Fetched Smogon data is cached server-side for the local process to keep the app
 responsive and polite to upstream services.
 
